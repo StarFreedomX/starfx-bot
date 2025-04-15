@@ -1,22 +1,41 @@
 {
   "name": "koishi-plugin-starfx-bot",
   "description": "StarFreedomX机器人的小功能，自用",
-  "version": "0.0.1",
+  "contributors": [
+    "StarFreedomX <starfreedomx@outlook.com>"
+  ],
+  "version": "0.0.2",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
     "lib",
-    "dist"
+    "dist",
+    "assets"
   ],
   "license": "MIT",
+  "homepage": "https://github.com/StarFreedomX/starfx-bot",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/StarFreedomX/starfx-bot.git"
+  },
   "scripts": {},
   "keywords": [
     "chatbot",
     "koishi",
     "plugin"
   ],
-  "devDependencies": {},
+  "koishi": {
+    "description": {
+      "zh": "starfx的机器人小插件，自用"
+    },
+    "service": {},
+    "preview": true,
+    "hidden": false
+  },
   "peerDependencies": {
     "koishi": "^4.18.7"
+  },
+  "dependencies": {
+    "jimp": "^1.6.0"
   }
 }
