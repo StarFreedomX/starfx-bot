@@ -3,7 +3,6 @@ import { Jimp } from 'jimp';
 //import { Sharp } from 'sharp'
 import * as fs from 'fs'
 
-
 export const name = 'starfx-bot'
 export let baseDir: string;
 export interface Config {
@@ -34,7 +33,6 @@ export function apply(ctx: Context, cfg: Config) {
   }
   // write your plugin here
 
-
   if (cfg.openLock) {
     ctx.command('封印 [param]')
       .action(async ({session}, param) => {
@@ -50,7 +48,6 @@ export function apply(ctx: Context, cfg: Config) {
 }
 
 export async function getImageSrc(session: Session, param: string){
-  const { gid } = session
   let userid = '';
   let imageSrc = '';
   console.log(param);
@@ -74,27 +71,11 @@ export async function getImageSrc(session: Session, param: string){
       return '';
     }
   }
-  if (userid){
-    const memberList = await getMemberList(session, gid)
-    const selected = memberList.find(u => u.user.id == userid)
-    return getMemberInfo(selected, selected.user.id)[1]
+  if(userid){
+    imageSrc = `https://q1.qlogo.cn/g?b=qq&nk=${userid}&s=640`;
   }
+
   return imageSrc;
-}
-
-async function getMemberList(session: Session, gid: string) {
-  let result: Universal.GuildMember[] = []
-  try {
-    const { data, next } = await session.bot.getGuildMemberList(session.guildId)
-    result = data
-    if (next) {
-      const { data } = await session.bot.getGuildMemberList(session.guildId, next)
-      result.push(...data)
-    }
-  } catch {
-
-  }
-  return result
 }
 
 export async function drawLock(baseImage: string) {
@@ -131,10 +112,4 @@ export async function drawSold(baseImage: string) {
   image.composite(middle);
   image.composite(overlay, image.width * 29 / 240, image.width * 29 / 240);
   return h.image(await image.getBuffer('image/jpeg'),"image/jpeg");
-}
-
-export function getMemberInfo(member: Universal.GuildMember, id: string) {
-  const name = member?.nick || member?.user?.nick || member?.user?.name || id
-  const avatar = member?.avatar || member?.user?.avatar
-  return [name, avatar]
 }
