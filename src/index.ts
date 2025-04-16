@@ -36,14 +36,16 @@ export function apply(ctx: Context, cfg: Config) {
   if (cfg.openSold) {
     ctx.command('卖掉了 [param]')
     .action(async ({session}, param) => {
-      return await drawSold(await getImageSrc(session, param));
+      console.log('content:');
+      console.log(session.content);
+      return await drawSold(await getImageSrc(session, session.content));
     })
   }
 }
 
 export async function getImageSrc(session: Session, param: string){
   let imageSrc = '';
-  console.log(param);
+  //console.log(param);
   if (!param){
     console.log('no')
     imageSrc = `https://q1.qlogo.cn/g?b=qq&nk=${session.userId}&s=640`;
