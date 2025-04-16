@@ -1,5 +1,6 @@
 import {Context, h, Schema, Session, Universal} from 'koishi'
 import { Jimp } from 'jimp';
+//import { Sharp } from 'sharp'
 import * as fs from 'fs'
 
 
@@ -52,6 +53,7 @@ export async function getImageSrc(session: Session, param: string){
   const { gid } = session
   let userid = '';
   let imageSrc = '';
+  console.log(param);
   if (!param){
     console.log('no')
     userid = session.userId;
@@ -65,10 +67,11 @@ export async function getImageSrc(session: Session, param: string){
     console.log('other')
     const index = param.indexOf('<');
     param = param.slice(index);
+    //console.log('2' + param);
     if (param?.length){
-      return '';
-    }else{
       return getImageSrc(session, param);
+    }else{
+      return '';
     }
   }
   if (userid){
@@ -111,6 +114,7 @@ export async function drawLock(baseImage: string) {
   image.composite(overlay);
   return h.image(await image.getBuffer('image/jpeg'),"image/jpeg");
 }
+
 export async function drawSold(baseImage: string) {
   if (!baseImage) {
     return '输入无效。';
