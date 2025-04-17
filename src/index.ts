@@ -18,7 +18,7 @@ export interface Config {
 export const Config: Schema<Config> = Schema.object({
   openLock: Schema.boolean().default(true).description('开启明日方舟封印功能'),
   openSold: Schema.boolean().default(true).description('开启闲鱼"卖掉了"功能'),
-  atNotSay: Schema.boolean().default(true).description('开启‘艾特我又不说话’功能'),
+  atNotSay: Schema.boolean().default(true).description('开启‘艾特我/他又不说话’功能'),
   replyBot: Schema.boolean().default(true).description('开启回复‘机器人’功能'),
   iLoveYou: Schema.boolean().default(true).description('开启‘我喜欢你’功能')
 })
