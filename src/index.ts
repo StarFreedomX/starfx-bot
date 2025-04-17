@@ -9,11 +9,13 @@ export let assetsDir: string;
 export interface Config {
   openLock: boolean,
   openSold: boolean,
+  atNotSay: boolean,
 }
 
 export const Config: Schema<Config> = Schema.object({
   openLock: Schema.boolean().default(true).description('开启明日方舟封印功能'),
   openSold: Schema.boolean().default(true).description('开启闲鱼"卖掉了"功能'),
+  atNotSay: Schema.boolean().default(true).description('开启‘艾特我又不说话’功能'),
 })
 
 export const usage = 'StarFreedomX的自用插件 放了一些小功能'
@@ -43,6 +45,16 @@ export function apply(ctx: Context, cfg: Config) {
       console.log(param);
       //console.log(session.selfId);
       return await drawSold(await getImageSrc(session, param));
+    })
+  }
+
+  if (cfg.atNotSay) {
+    ctx.middleware(async (session, next) => {
+      const elements = session.elements;
+      if (elements.length === 1 && elements[0].type === 'at' && elements[0].attrs.id === session.selfId) {
+        await session.send('艾特我又不说话');
+      }
+      return next();
     })
   }
 }
