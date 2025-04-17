@@ -23,7 +23,9 @@ export const Config: Schema<Config> = Schema.object({
   iLoveYou: Schema.boolean().default(true).description('开启‘我喜欢你’功能')
 })
 
-export const usage = 'StarFreedomX的自用插件 放了一些小功能'
+export const usage =
+  `<h5>StarFreedomX的自用插件 放了一些小功能</h5>
+  `
 
 export function apply(ctx: Context, cfg: Config) {
   baseDir = ctx.baseDir;
