@@ -11,17 +11,21 @@ export interface Config {
   openLock: boolean,
   openSold: boolean,
   atNotSay: boolean,
-  replyBot: boolean,
+  atNotSayOther: boolean,
+  replyBot: string,
   iLoveYou: boolean,
 }
 
-export const Config: Schema<Config> = Schema.object({
-  openLock: Schema.boolean().default(true).description('开启明日方舟封印功能'),
-  openSold: Schema.boolean().default(true).description('开启闲鱼"卖掉了"功能'),
-  atNotSay: Schema.boolean().default(true).description('开启‘艾特我/他又不说话’功能'),
-  replyBot: Schema.boolean().default(true).description('开启回复‘机器人’功能'),
-  iLoveYou: Schema.boolean().default(true).description('开启‘我喜欢你’功能')
-})
+export const Config = Schema.intersect([
+  Schema.object({
+    openLock: Schema.boolean().default(true).description('开启明日方舟封印功能'),
+    openSold: Schema.boolean().default(true).description('开启闲鱼"卖掉了"功能'),
+    atNotSay: Schema.boolean().default(true).description('开启‘艾特我又不说话’功能'),
+    atNotSayOther: Schema.boolean().default(true).description('开启‘艾特他又不说话’功能'),
+    iLoveYou: Schema.boolean().default(true).description('开启‘我喜欢你’功能'),
+    replyBot: Schema.union(['关闭', '无需at', '必须at']).default('无需at').description('回复‘我才是不是机器人！’功能'),
+  }),
+])
 
 export const usage =
   `<h5>StarFreedomX的自用插件 放了一些小功能</h5>
@@ -58,16 +62,19 @@ export function apply(ctx: Context, cfg: Config) {
   ctx.middleware(async (session, next) => {
     const elements = session.elements;
     console.log(elements);
-    if (cfg.atNotSay) {
+    if (cfg.atNotSay || cfg.atNotSayOther) {
       if (elements.length === 1 && elements[0].type === 'at') {
         if (elements[0].attrs.id === session.selfId) {
-          await session.send('艾特我又不说话');
-        }else{
-          await session.send('艾特他又不说话');
+          if (cfg.atNotSay)
+            await session.send('艾特我又不说话');
+        } else {
+          if (cfg.atNotSayOther)
+            await session.send('艾特他又不说话');
         }
       }
     }
-    if (cfg.replyBot) {
+    if (cfg.replyBot !== '关闭') {
+      //console.log('test')
       const bots = ['bot', '机器人', 'Bot', 'BOT', '机器人！', '机器人!'];
       const texts = elements?.filter(e => e.type === 'text').map(e => e?.attrs?.content?.trim());
       const ats = elements?.filter(e => e.type === 'at').map(e => e?.attrs?.id);
@@ -75,7 +82,7 @@ export function apply(ctx: Context, cfg: Config) {
       const mentionedBot = texts?.some(t => bots.includes(t));
       const atMe = ats?.includes(session.selfId);
       if (
-        (elements?.length === 1 && mentionedBot) ||
+        (elements?.length === 1 && mentionedBot && cfg.replyBot === '无需at') ||
         (elements?.length === 2 && mentionedBot && atMe)
       ) {
         await session.send('我才不是机器人！');
@@ -87,7 +94,7 @@ export function apply(ctx: Context, cfg: Config) {
         elements?.length === 2 &&
         elements.some(e => e.type === 'at' && e?.attrs?.id === session.selfId) &&
         elements.some(e => e.type === 'text' && e?.attrs?.content?.trim() === '我喜欢你')
-      ){
+      ) {
         await session.send(`${h.quote(session.messageId)}${h.at(session.userId)} 我也喜欢你`)
       }
     }
