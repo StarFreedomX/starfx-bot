@@ -1,0 +1,8 @@
+commands:
+middleware:
+  messages:
+    atNotReply: '艾特我又不说话'
+    atNotReplyOther: '艾特他又不说话'
+    notBot: '我才不是机器人！'
+    loveMessage: '我喜欢你'
+    iLoveU: '我也喜欢你'

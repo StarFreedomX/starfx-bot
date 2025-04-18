@@ -1,4 +1,4 @@
-import {Context, h, Schema, Session} from 'koishi'
+import {Context, h, Random, Schema, Session} from 'koishi'
 import {Jimp} from 'jimp';
 //import { Sharp } from 'sharp'
 import * as fs from 'fs'
@@ -12,6 +12,8 @@ export interface Config {
   openSold: boolean,
   atNotSay: boolean,
   atNotSayOther: boolean,
+  atNotSayProperty: number,
+  atNotSayOtherProperty: number,
   replyBot: string,
   iLoveYou: boolean,
 }
@@ -21,9 +23,13 @@ export const Config = Schema.intersect([
     openLock: Schema.boolean().default(true).description('开启明日方舟封印功能'),
     openSold: Schema.boolean().default(true).description('开启闲鱼"卖掉了"功能'),
     atNotSay: Schema.boolean().default(true).description('开启‘艾特我又不说话’功能'),
+    atNotSayProperty: Schema.number().role('slider')
+      .min(0).max(1).step(0.01).default(0.5).description("'艾特我又不说话'回复概率"),
     atNotSayOther: Schema.boolean().default(true).description('开启‘艾特他又不说话’功能'),
+    atNotSayOtherProperty: Schema.number().role('slider')
+      .min(0).max(1).step(0.01).default(0.5).description("'艾特他又不说话'回复概率"),
     iLoveYou: Schema.boolean().default(true).description('开启‘我喜欢你’功能'),
-    replyBot: Schema.union(['关闭', '无需at', '必须at']).default('无需at').description('回复‘我才是不是机器人！’功能'),
+    replyBot: Schema.union(['关闭', '无需at', '必须at']).default('无需at').description('回复‘我才不是机器人！’功能'),
   }),
 ])
 
@@ -32,6 +38,9 @@ export const usage =
   `
 
 export function apply(ctx: Context, cfg: Config) {
+
+  ctx.i18n.define('zh-CN', require('./locales/zh-CN'));
+
   baseDir = ctx.baseDir;
   assetsDir = `${ctx.baseDir}/data/starfx-bot/assets`;
   //init
@@ -65,17 +74,23 @@ export function apply(ctx: Context, cfg: Config) {
     if (cfg.atNotSay || cfg.atNotSayOther) {
       if (elements.length === 1 && elements[0].type === 'at') {
         if (elements[0].attrs.id === session.selfId) {
-          if (cfg.atNotSay)
-            await session.send('艾特我又不说话');
+          if (cfg.atNotSay) {
+            if (Random.bool(cfg.atNotSayProperty)) {
+              await session.send(session.text('middleware.messages.atNotReply'));
+            }
+          }
         } else {
-          if (cfg.atNotSayOther)
-            await session.send('艾特他又不说话');
+          if (cfg.atNotSayOther) {
+            if (Random.bool(cfg.atNotSayOtherProperty)) {
+              await session.send(session.text('middleware.messages.atNotReplyOther'));
+            }
+          }
         }
       }
     }
     if (cfg.replyBot !== '关闭') {
       //console.log('test')
-      const bots = ['bot', '机器人', 'Bot', 'BOT', '机器人！', '机器人!'];
+      const bots = ['bot', '机器人', 'Bot', 'BOT', '机器人！', '机器人!', '人机'];
       const texts = elements?.filter(e => e.type === 'text').map(e => e?.attrs?.content?.trim());
       const ats = elements?.filter(e => e.type === 'at').map(e => e?.attrs?.id);
 
@@ -85,7 +100,7 @@ export function apply(ctx: Context, cfg: Config) {
         (elements?.length === 1 && mentionedBot && cfg.replyBot === '无需at') ||
         (elements?.length === 2 && mentionedBot && atMe)
       ) {
-        await session.send('我才不是机器人！');
+        await session.send(session.text('middleware.messages.notBot'));
       }
 
     }
@@ -93,9 +108,12 @@ export function apply(ctx: Context, cfg: Config) {
       if (
         elements?.length === 2 &&
         elements.some(e => e.type === 'at' && e?.attrs?.id === session.selfId) &&
-        elements.some(e => e.type === 'text' && e?.attrs?.content?.trim() === '我喜欢你')
+        elements.some(e => e.type === 'text' && e?.attrs?.content?.trim() === session.text('middleware.messages.loveMessage'))
       ) {
-        await session.send(`${h.quote(session.messageId)}${h.at(session.userId)} 我也喜欢你`)
+        await session.send(session.text('middleware.messages.iLoveU', {
+          at: h.at(session.userId),
+          quote: h.quote(session.messageId)
+        }))
       }
     }
 
