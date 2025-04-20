@@ -180,7 +180,7 @@ export async function drawLock(ctx: Context, baseImage: string) {
   const size1 = Math.min(imageMetadata.width, imageMetadata.height);
   image.resize({width: size1, height: size1, fit: 'cover'})
   const overlay = sharp(lockUrl).png();
-  overlay.resize({width: imageMetadata.width});
+  overlay.resize({width: size1});
   image.composite([{input: await overlay.toBuffer()}]);
   return h.image(await image.png().toBuffer(), "image/png");
 }
@@ -210,7 +210,7 @@ export async function drawSold(ctx: Context, baseImage: string) {
   }).png();
   const soldUrl = `${assetsDir}/sold.png`;
   const overlay = sharp(soldUrl).png();
-  const overlaySize = Math.round(imageMetadata.width * 182 / 240)
+  const overlaySize = Math.round(size1 * 182 / 240)
   overlay.resize({
     width: overlaySize,
     height: overlaySize,
