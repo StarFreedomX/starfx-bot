@@ -161,10 +161,14 @@ export async function getImageSrc(session: Session, param: string) {
 }
 
 function initAssets(fileName: string) {
+
   if (fs.existsSync(`${__dirname}/../assets/${fileName}`)) {
-    fs.mkdirSync(`${assetsDir}/`, {recursive: true})
-    fs.copyFileSync(`${__dirname}/../assets/${fileName}`, `${assetsDir}/${fileName}`)
-    fs.rmSync(`${__dirname}/../assets/${fileName}`)
+    fs.mkdirSync(`${assetsDir}/`, {recursive: true});
+    fs.copyFileSync(`${__dirname}/../assets/${fileName}`, `${assetsDir}/${fileName}`);
+    //开发环境不删除assets，方便包的发布(这样就不会忘记assets了
+    if (process.env.NODE_ENV !== "development") {
+      fs.rmSync(`${__dirname}/../assets/${fileName}`);
+    }
   }
 }
 
