@@ -1,6 +1,6 @@
 import {Context, h, Random, Schema, Session} from 'koishi'
-import {Jimp} from 'jimp';
-//import { Sharp } from 'sharp'
+//import {Jimp} from 'jimp';
+import sharp from 'sharp'
 import * as fs from 'fs'
 
 export const name = 'starfx-bot'
@@ -51,7 +51,13 @@ export function apply(ctx: Context, cfg: Config) {
   if (cfg.openLock) {
     ctx.command('封印 [param]')
       .action(async ({session}, param) => {
-        return await drawLock(await getImageSrc(session, param));
+        console.log('elements');
+        console.log(session.elements);
+        console.log('quote');
+        console.log(session.quote);
+        console.log('param');
+        console.log(param);
+        return await drawLock(ctx, await getImageSrc(session, param));
       })
   }
   if (cfg.openSold) {
@@ -64,7 +70,7 @@ export function apply(ctx: Context, cfg: Config) {
         console.log('param');
         console.log(param);
         //console.log(session.selfId);
-        return await drawSold(await getImageSrc(session, param));
+        return await drawSold(ctx, await getImageSrc(session, param));
       })
   }
 
@@ -134,7 +140,7 @@ export async function getImageSrc(session: Session, param: string) {
   for (const element of elementArray) {
     if (element?.type === 'img') {
       return element?.attrs?.src;
-    } else if (element?.type === 'at' && element?.attrs?.id && element.attrs.id !== session.selfId) {
+    } else if (element?.type === 'at' && element?.attrs?.id) {
       return `https://q1.qlogo.cn/g?b=qq&nk=${element.attrs.id}&s=640`;
     }
   }
@@ -162,49 +168,79 @@ function initAssets(fileName: string) {
   }
 }
 
-export async function drawLock(baseImage: string) {
-  if (!baseImage) {
-    return '输入无效。';
+export async function drawLock(ctx: Context, baseImage: string) {
+  const image = await getImageFromUrl(ctx, baseImage);
+  if (image === -1){
+    return '发生错误'
+  }else if (image === -2){
+    return '输入无效'
   }
-  const lockUrl = `${baseDir}/data/starfx-bot/assets/lock.png`
-  let image;
-  try {
-    image = await Jimp.read(baseImage);
-  } catch (err) {
-    console.error(err);
-    return '发生错误。';
-  }
-  const size1 = image.width > image.height ? image.height : image.width;
-  image.cover({w: size1, h: size1})
-  //const middle = new Jimp({width: image.width, height: image.height, color: 0xffffffff});
-  const overlay = await Jimp.read(lockUrl);
-  //image.resize({w:300,h:300});
-  overlay.resize({w: image.width});
-  //middle.opacity(0.2);
-  //image.composite(middle);
-  image.composite(overlay);
-  return h.image(await image.getBuffer('image/jpeg'), "image/jpeg");
+  const imageMetadata = await image.metadata();
+  const lockUrl = `${baseDir}/data/starfx-bot/assets/lock.png`;
+  const size1 = Math.min(imageMetadata.width, imageMetadata.height);
+  image.resize({width: size1, height: size1, fit: 'cover'})
+  const overlay = sharp(lockUrl).png();
+  overlay.resize({width: size1});
+  image.composite([{input: await overlay.toBuffer()}]);
+  return h.image(await image.png().toBuffer(), "image/png");
 }
 
-export async function drawSold(baseImage: string) {
-  if (!baseImage) {
-    return '输入无效。';
+/**
+ * "卖掉了"绘图函数
+ * @param ctx
+ * @param baseImage
+ */
+export async function drawSold(ctx: Context, baseImage: string) {
+  const image = await getImageFromUrl(ctx, baseImage);
+  if (image === -1){
+    return '发生错误'
+  }else if (image === -2){
+    return '输入无效'
   }
+  const imageMetadata = await image.metadata();
+  const size1 = Math.min(imageMetadata.width, imageMetadata.height);
+  image.resize({width: size1, height: size1, fit: 'cover'})
+  const middle = sharp({
+    create: {
+      width: size1,
+      height: size1,
+      channels: 4,
+      background: {r: 255, g: 255, b: 255, alpha: 0.4},
+    }
+  }).png();
   const soldUrl = `${assetsDir}/sold.png`;
-  let image;
+  const overlay = sharp(soldUrl).png();
+  const overlaySize = Math.round(size1 * 182 / 240)
+  overlay.resize({
+    width: overlaySize,
+    height: overlaySize,
+  });
+  const topLeft = Math.round(overlaySize * 29 / 182)
+
+  image.composite([
+    {input: await middle.toBuffer()},
+    {
+      input: await overlay.toBuffer(),
+      top: topLeft,
+      left: topLeft,
+    }
+  ]);
+  return h.image(await image.png().toBuffer(), "image/png");
+}
+
+
+async function getImageFromUrl(ctx:Context, url: string) {
+  if (!url) return -2;
+
+  let image: sharp.Sharp;
+  const config = {
+    responseType: 'arraybuffer' as 'arraybuffer'
+  }
   try {
-    image = await Jimp.read(baseImage);
+    image = sharp(await ctx.http.get(url, config)).png();
   } catch (err) {
     console.error(err);
-    return '发生错误。'
+    return -1;
   }
-  const size1 = Math.min(image.width, image.height);
-  image.cover({w: size1, h: size1})
-  const middle = new Jimp({width: image.width, height: image.height, color: 0xffffffff});
-  const overlay = await Jimp.read(soldUrl);
-  overlay.resize({w: image.width * 182 / 240});
-  middle.opacity(0.4);
-  image.composite(middle);
-  image.composite(overlay, image.width * 29 / 240, image.width * 29 / 240);
-  return h.image(await image.getBuffer('image/jpeg'), "image/jpeg");
+  return image;
 }
