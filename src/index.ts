@@ -202,7 +202,8 @@ export async function handleBanGDreamConfig(ctx: Context, options) {
     }
   }
   // 处理 starNum 参数
-  drawConfig.starNum = options.starNum ? parseInt(options.starNum) : 0;
+  const starNum = options.starNum ? parseInt(options.starNum) : 0;
+  drawConfig.starNum =  starNum > 0 && starNum < 10 ? starNum : 0;
 
   // 处理 starType 参数
   if (drawConfig.starType){
@@ -356,16 +357,17 @@ async function drawBanGDream(avatar: string, inputOptions?: {
   const colors = ['cool', 'pure', 'happy', 'powerful'];
   const bands = ['ppp', 'ag', 'pp', 'r', 'hhw', 'ras', 'mnk', 'go'];
   const starTypes = ['normal_star', 'color_star'];
+  const starNums = [1, 2, 3, 4, 5];
   //const borders = ['card-1', 'card-2', 'card-3', 'card-4', 'card-5'];
   const options = {
     color: inputOptions.color || Random.pick(colors),
     band: inputOptions.band || Random.pick(bands),
-    starNum: inputOptions.starNum || Random.pick([1, 2, 3, 4, 5]),
+    starNum: inputOptions.starNum || Random.pick(starNums),
     starType: inputOptions.starType || '',
     border: inputOptions.border || '',
   }
   options.starType ||= options.starNum < 3 ? starTypes[0] : Random.pick(starTypes);
-  options.border ||= `card-${options.starNum}${options.starNum == 1 ? `-${options.color}` : ''}`;
+  options.border ||= `card-${starNums.includes(options.starNum) ? options.starNum : 5}${options.starNum == 1 ? `-${options.color}` : ''}`;
 
 
   const [image, colorImage, bandImage, starImage, borderImage] = await Promise.all([
