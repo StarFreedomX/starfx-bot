@@ -2,13 +2,16 @@ import {Context, h, Logger, Random, Schema, Session} from 'koishi'
 //import {Jimp} from 'jimp';
 import sharp from 'sharp'
 import * as fs from 'fs'
-import {Jimp} from "jimp";
+import { Jimp } from "jimp";
 import path from "node:path";
 
 export const name = 'starfx-bot'
 export let baseDir: string;
 export let assetsDir: string;
 export const starfxLogger: Logger = new Logger('starfx-bot')
+
+//复读共享上下文
+export const repeatContextMap = new Map<string, [string, number]>();
 
 export interface Config {
   openLock: boolean,
@@ -19,6 +22,9 @@ export interface Config {
   atNotSayProperty: number,
   atNotSayOtherProperty: number,
   record: boolean,
+  openRepeat: boolean,
+  minRepeatTimes: number,
+  repeatPossibility: number,
   replyBot: string,
   iLoveYou: boolean,
 }
@@ -35,7 +41,10 @@ export const Config = Schema.intersect([
     atNotSayOther: Schema.boolean().default(true).description('开启‘艾特他又不说话’功能'),
     atNotSayOtherProperty: Schema.number().role('slider')
       .min(0).max(1).step(0.01).default(0.5).description("'艾特他又不说话'回复概率"),
-
+    openRepeat: Schema.boolean().default(true).description('开启复读功能'),
+    minRepeatTimes: Schema.number().default(2).description('最少重复次数'),
+    repeatPossibility: Schema.number().role('slider')
+      .min(0).max(1).step(0.01).default(0.3).description('复读发生概率'),
     iLoveYou: Schema.boolean().default(true).description('开启‘我喜欢你’功能'),
     replyBot: Schema.union(['关闭', '无需at', '必须at']).default('无需at').description('回复‘我才不是机器人！’功能'),
   }),
@@ -106,6 +115,29 @@ export function apply(ctx: Context, cfg: Config) {
     const elements = session.elements;
     //console.log(elements);
 
+    if(cfg.openRepeat){
+
+      const gid = session.gid;
+      const content = session.content;
+      const groupMap = repeatContextMap.get(gid);
+      if (!groupMap || groupMap[0] !== content) {
+        //console.log('save:')
+        //console.log(content)
+        //存储到上下文中
+        repeatContextMap.set(gid, [content, 1]);
+      }else{
+        //groupMap[0]===content
+        if (groupMap[1] !== -1 && ++groupMap[1] >= cfg.minRepeatTimes && Random.bool(cfg.repeatPossibility)){
+          groupMap[1] = -1;
+          //console.log('send:')
+          //console.log(content);
+          await session.send(content);
+        }
+      }
+      //console.log(repeatContextMap)
+    }
+
+
     await atNotSayReply(cfg, session, elements);
 
     await replyBot(cfg, session, elements);
@@ -118,6 +150,8 @@ export function apply(ctx: Context, cfg: Config) {
       if (!filepath) return '暂无语录呢';
       return h.image(filepath);
     }
+
+
 
     return next();
   });
