@@ -1,12 +1,14 @@
-import {Context, h, Random, Schema, Session} from 'koishi'
+import {Context, h, Logger, Random, Schema, Session} from 'koishi'
 //import {Jimp} from 'jimp';
 import sharp from 'sharp'
 import * as fs from 'fs'
 import {Jimp} from "jimp";
+import path from "node:path";
 
 export const name = 'starfx-bot'
 export let baseDir: string;
 export let assetsDir: string;
+export const starfxLogger: Logger = new Logger('starfx-bot')
 
 export interface Config {
   openLock: boolean,
@@ -16,6 +18,7 @@ export interface Config {
   atNotSayOther: boolean,
   atNotSayProperty: number,
   atNotSayOtherProperty: number,
+  record: boolean,
   replyBot: string,
   iLoveYou: boolean,
 }
@@ -25,12 +28,14 @@ export const Config = Schema.intersect([
     openLock: Schema.boolean().default(true).description('开启明日方舟封印功能'),
     openSold: Schema.boolean().default(true).description('开启闲鱼"卖掉了"功能'),
     bangdreamBorder: Schema.boolean().default(true).description('开启BanG Dream!边框功能'),
+    record: Schema.boolean().default(true).description('开启群语录功能'),
     atNotSay: Schema.boolean().default(true).description('开启‘艾特我又不说话’功能'),
     atNotSayProperty: Schema.number().role('slider')
       .min(0).max(1).step(0.01).default(0.5).description("'艾特我又不说话'回复概率"),
     atNotSayOther: Schema.boolean().default(true).description('开启‘艾特他又不说话’功能'),
     atNotSayOtherProperty: Schema.number().role('slider')
       .min(0).max(1).step(0.01).default(0.5).description("'艾特他又不说话'回复概率"),
+
     iLoveYou: Schema.boolean().default(true).description('开启‘我喜欢你’功能'),
     replyBot: Schema.union(['关闭', '无需at', '必须at']).default('无需at').description('回复‘我才不是机器人！’功能'),
   }),
@@ -79,6 +84,24 @@ export function apply(ctx: Context, cfg: Config) {
       })
   }
 
+  if (cfg.record) {
+    ctx.command('投稿 [param]')
+    .action(async ({session}, param) => {
+      const imageSrc = await getImageSrc(session, param,
+        {
+          img: true,
+          at: false,
+          quote: true,
+          noParam: false,
+          number: false
+        });
+      if (!imageSrc) {return '请发送带图片的指令消息或引用图片消息进行投稿'}
+      return await addRecord(ctx, session.gid.replace(':', '_'), imageSrc);
+      //console.log('oooooo')
+      //return h.image('https://bestdori.com/assets/jp/musicjacket/musicjacket600_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket600-596_sensenfukoku_super-jacket.png')
+    })
+  }
+
   ctx.middleware(async (session, next) => {
     const elements = session.elements;
     //console.log(elements);
@@ -89,10 +112,15 @@ export function apply(ctx: Context, cfg: Config) {
 
     await iLoveYou(cfg, session, elements);
 
+    if (cfg.record && session.content?.startsWith('语录')){
+      const filepath = await getRecord(session.gid.replace(':', '_'));
+      starfxLogger.info(`send record: ${filepath}`);
+      if (!filepath) return '暂无语录呢';
+      return h.image(filepath);
+    }
 
     return next();
   });
-
 
   function initAssets() {
     const fromUrl = `${__dirname}/../assets`;
@@ -111,31 +139,100 @@ export function apply(ctx: Context, cfg: Config) {
   }
 }
 
-export async function getImageSrc(session: Session, param: string): Promise<string> {
+
+export async function addRecord(ctx: Context, gid: string, avatarUrl: string) {
+  const recordDir = `${assetsDir}/record/${gid}`;
+  const avatarBuffer = await ctx.http.get(avatarUrl, {responseType: 'arraybuffer'});
+  saveImage(avatarBuffer, recordDir);
+  return '添加成功!'
+}
+
+export async function getRecord(gid: string){
+  const recordDir = `${assetsDir}/record/${gid}`;
+  const files = fs.readdirSync(recordDir);
+  return files?.length ? path.join(recordDir, Random.pick(files)) : null;
+}
+
+
+function getTodayPrefix(): string {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return `${yyyy}${mm}${dd}`;
+}
+
+function getNextSequenceNumber(directory: string, prefix: string): number {
+  const files = fs.existsSync(directory) ? fs.readdirSync(directory) : [];
+  const regex = new RegExp(`^${prefix}-(\\d+)\\.jpg$`);
+  let maxNum = 0;
+  files.forEach(file => {
+      const match = file.match(regex);
+      if(match){
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) {
+          maxNum = num;
+        }
+      }
+    })
+  return maxNum + 1;
+}
+
+function saveImage(arrayBuffer: ArrayBuffer, directory: string) {
+  const prefix = getTodayPrefix();
+  const seq = getNextSequenceNumber(directory, prefix);
+  const filename = `${prefix}-${seq}.jpg`;
+  const filepath = path.join(directory, filename);
+
+  if (!fs.existsSync(directory)) {
+    fs.mkdirSync(directory, { recursive: true });
+  }
+
+  const buffer = Buffer.from(arrayBuffer);
+  fs.writeFileSync(filepath, buffer);
+  console.log(`已保存图片：${filepath}`);
+}
+
+export async function getImageSrc(session: Session, param: string, option?:{
+  number?: boolean,
+  img?: boolean,
+  at?: boolean,
+  noParam?: boolean,
+  quote?: boolean,
+}): Promise<string> {
+  const
+    number = option?.number ?? true,
+    img = option?.img ?? true,
+    at = option?.at ?? true,
+    noParam = option?.noParam ?? true,
+    quote = option?.quote ?? true;
+
 
   //判断参数是不是纯数字或者没有参数
-  if (param?.length && param?.length === String(Number(param))?.length) {
+  if (number && param?.length && param?.length === String(Number(param))?.length) {
     return `https://q1.qlogo.cn/g?b=qq&nk=${param}&s=640`;
-  } else if (!param?.length) {
+  } else if (noParam && !param?.length) {
     return `https://q1.qlogo.cn/g?b=qq&nk=${session.userId}&s=640`;
   }
   //发送的消息中选择
   const elementArray = session.elements;
   for (const element of elementArray) {
-    if (element?.type === 'img') {
+    if (img && element?.type === 'img') {
       return element?.attrs?.src;
-    } else if (element?.type === 'at' && element?.attrs?.id) {
+    } else if (at && element?.type === 'at' && element?.attrs?.id) {
       return `https://q1.qlogo.cn/g?b=qq&nk=${element.attrs.id}&s=640`;
     }
   }
-  //引用的消息中选择
-  const quoteElementArray = session?.quote?.elements;
-  if (quoteElementArray?.length) {
-    for (const element of quoteElementArray) {
-      if (element?.type === 'img') {
-        return element?.attrs?.src;
-      } else if (element?.type === 'at' && element?.attrs?.id && element.attrs.id !== session.selfId) {
-        return `https://q1.qlogo.cn/g?b=qq&nk=${element?.attrs?.id}&s=640`;
+  if(quote){
+    //引用的消息中选择
+    const quoteElementArray = session?.quote?.elements;
+    if (quoteElementArray?.length) {
+      for (const element of quoteElementArray) {
+        if (img && element?.type === 'img') {
+          return element?.attrs?.src;
+        } else if (at && element?.type === 'at' && element?.attrs?.id && element.attrs.id !== session.selfId) {
+          return `https://q1.qlogo.cn/g?b=qq&nk=${element?.attrs?.id}&s=640`;
+        }
       }
     }
   }
@@ -163,14 +260,14 @@ export async function handleBanGDreamConfig(ctx: Context, options) {
     happy: ['happy', 'orange', '橙', '橙色'],
   }
   const bands = {
-    ppp: ['ppp', 'Poppin\'Party', '破琵琶', '步品破茶', 'poppin', 'popipa', 'poppinparty', 'ポピパ'],
-    ag: ['ag', 'Afterglow', '夕阳红', '悪蓋愚狼'],
-    pp: ['pp', 'Pastel＊Palettes', 'Pastel*Palettes', 'PastelPalettes', '怕死怕累', 'pastel', 'palettes', 'pasupare', 'パスパレ', '破巣照破烈斗'],
-    hhw: ['hhw', 'ハロー、ハッピーワールド！', 'Hello,HappyWorld!', 'helloHappyWorld', 'ハロハピ', 'Hello，HappyWorld！', 'harohapi', '破狼法被威悪怒', '儿歌团', '好好玩'],
-    r: ['r', 'Roselia', '露世里恶', '萝', '露世裏悪', 'ロゼリア', 'r组', '相声团', '相声组'],
-    ras: ['ras', 'RaiseASuilen', 'raise', 'suilen', 'ラス', '零図悪酔恋', '睡莲', '麗厨唖睡蓮', '睡蓮'],
-    mnk: ['mnk', 'モニカ', '蝶团', '蝶', 'Morfonica', '毛二力', 'monika', 'monica'],
-    go: ['go', 'MyGO!!!!!', 'MyGO！！！！！', 'mygo', '我去！！！！！', '我去!!!!!', '我去', '卖狗']
+    ppp: ['ppp', 'poppin\'Party', '破琵琶', '步品破茶', 'poppin', 'popipa', 'poppinparty', 'ポピパ'],
+    ag: ['ag', 'afterglow', '夕阳红', '悪蓋愚狼'],
+    pp: ['pp', 'pastel＊palettes', 'pastel*palettes', 'pastelPalettes', '怕死怕累', 'pastel', 'palettes', 'pasupare', 'パスパレ', '破巣照破烈斗'],
+    hhw: ['hhw', 'ハロー、ハッピーワールド！', 'hello,happyworld!', 'hellohappyworld', 'ハロハピ', 'hello，happyworld！', 'harohapi', '破狼法被威悪怒', '儿歌团', '好好玩'],
+    r: ['r', 'roselia', '露世里恶', '萝', '露世裏悪', 'ロゼリア', 'r组', '相声团', '相声组'],
+    ras: ['ras', 'raiseasuilen', 'raise', 'suilen', 'ラス', '零図悪酔恋', '睡莲', '麗厨唖睡蓮', '睡蓮'],
+    mnk: ['mnk', 'モニカ', '蝶团', '蝶', 'morfonica', '毛二力', 'monika', 'monica'],
+    go: ['go', 'mygo!!!!!', 'mygo！！！！！', 'mygo', '我去！！！！！', '我去!!!!!', '我去', '卖狗']
   }
   const trains = {
     'color_star': ['花后', '1', '彩', 'true'],
@@ -206,9 +303,9 @@ export async function handleBanGDreamConfig(ctx: Context, options) {
   drawConfig.starNum =  starNum > 0 && starNum < 10 ? starNum : 0;
 
   // 处理 starType 参数
-  if (drawConfig.starType){
+  if (options.train){
       for (const [train, aliases] of Object.entries(trains)) {
-        if (aliases.includes(options.color.toLowerCase())) {
+        if (aliases.includes(options.train.toLowerCase())) {
           drawConfig.starType = train;
           break;
         }
