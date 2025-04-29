@@ -113,28 +113,19 @@ export function apply(ctx: Context, cfg: Config) {
 
   ctx.middleware(async (session, next) => {
     const elements = session.elements;
-    //console.log(elements);
-
     if(cfg.openRepeat){
-
-      const gid = session.gid;
       const content = session.content;
-      const groupMap = repeatContextMap.get(gid);
-      if (!groupMap || groupMap[0] !== content) {
-        //console.log('save:')
-        //console.log(content)
-        //存储到上下文中
-        repeatContextMap.set(gid, [content, 1]);
+      const ctxArr = repeatContextMap.get(session.gid);
+      if (!ctxArr || ctxArr[0] !== content) {
+        //初始化 存储到上下文中
+        repeatContextMap.set(session.gid, [content, 1]);
       }else{
-        //groupMap[0]===content
-        if (groupMap[1] !== -1 && ++groupMap[1] >= cfg.minRepeatTimes && Random.bool(cfg.repeatPossibility)){
-          groupMap[1] = -1;
-          //console.log('send:')
-          //console.log(content);
+        //here groupMap[0]===content
+        if (ctxArr[1] !== -1 && ++ctxArr[1] >= cfg.minRepeatTimes && Random.bool(cfg.repeatPossibility)){
+          ctxArr[1] = -1;
           await session.send(content);
         }
       }
-      //console.log(repeatContextMap)
     }
 
 
@@ -178,7 +169,7 @@ export async function addRecord(ctx: Context, gid: string, avatarUrl: string) {
   const recordDir = `${assetsDir}/record/${gid}`;
   const avatarBuffer = await ctx.http.get(avatarUrl, {responseType: 'arraybuffer'});
   saveImage(avatarBuffer, recordDir);
-  return '添加成功!'
+  return '投稿收到啦'
 }
 
 export async function getRecord(gid: string){
