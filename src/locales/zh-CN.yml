@@ -1,4 +1,7 @@
 commands:
+  roll:
+    messages:
+      noParam: '请输入要随机的对象'
 middleware:
   messages:
     atNotReply: '艾特我又不说话'

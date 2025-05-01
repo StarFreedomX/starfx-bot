@@ -10,21 +10,35 @@ export const starfxLogger: Logger = new Logger('starfx-bot')
 //复读共享上下文
 export const repeatContextMap = new Map<string, [string, number]>();
 
+
 export interface Config {
+  //绘图
   openLock: boolean,
   openSold: boolean,
   bangdreamBorder: boolean,
-  atNotSay: boolean,
-  atNotSayOther: boolean,
-  atNotSayProperty: number,
-  atNotSayOtherProperty: number,
+
+  //语录
   record: boolean,
+
+  //随机数
+  roll: boolean,
+
+  //回应
+  atNotSay: boolean,
+  atNotSayProperty: number,
+  atNotSayOther: boolean,
+  atNotSayOtherProperty: number,
+  iLoveYou: boolean,
+  replyBot: string,
+
+  //复读
   openRepeat: boolean,
   minRepeatTimes: number,
   repeatPossibility: number,
-  saveArchive: boolean,
-  replyBot: string,
-  iLoveYou: boolean,
+  //saveArchive: boolean,
+
+  //功能控制
+  featureControl: string,
 }
 
 export const Config = Schema.intersect([
@@ -32,25 +46,39 @@ export const Config = Schema.intersect([
     openLock: Schema.boolean().default(true).description('开启明日方舟封印功能'),
     openSold: Schema.boolean().default(true).description('开启闲鱼"卖掉了"功能'),
     bangdreamBorder: Schema.boolean().default(true).description('开启BanG Dream!边框功能'),
+  }).description('绘图功能'),
+  Schema.object({
     record: Schema.boolean().default(true).description('开启群语录功能'),
-    saveArchive: Schema.boolean().default(false).description('开启入典功能').hidden(),
+    //saveArchive: Schema.boolean().default(false).description('开启入典功能').hidden(),
+  }).description('语录记录功能'),
+  Schema.object({
+    roll: Schema.boolean().default(false).description('开启roll随机数功能').hidden(),
+  }).description('指令小功能'),
+  Schema.object({
     atNotSay: Schema.boolean().default(true).description('开启‘艾特我又不说话’功能'),
     atNotSayProperty: Schema.number().role('slider')
       .min(0).max(1).step(0.01).default(0.5).description("'艾特我又不说话'回复概率"),
     atNotSayOther: Schema.boolean().default(true).description('开启‘艾特他又不说话’功能'),
     atNotSayOtherProperty: Schema.number().role('slider')
       .min(0).max(1).step(0.01).default(0.5).description("'艾特他又不说话'回复概率"),
+    iLoveYou: Schema.boolean().default(true).description('开启‘我喜欢你’功能'),
+    replyBot: Schema.union(['关闭', '无需at', '必须at']).default('无需at').description('回复‘我才不是机器人！’功能'),
+  }).description('特定回应功能'),
+  Schema.object({
     openRepeat: Schema.boolean().default(true).description('开启复读功能'),
     minRepeatTimes: Schema.number().default(2).description('最少重复次数'),
     repeatPossibility: Schema.number().role('slider')
       .min(0).max(1).step(0.01).default(0.3).description('复读发生概率'),
-    iLoveYou: Schema.boolean().default(true).description('开启‘我喜欢你’功能'),
-    replyBot: Schema.union(['关闭', '无需at', '必须at']).default('无需at').description('回复‘我才不是机器人！’功能'),
-  }),
+  }).description('复读功能'),
+  Schema.object({
+    featureControl: Schema.string().role('textarea', {rows: [15]}).default('{\n\n}')
+      .description(`黑/白名单配置，语法为JSON格式(可以不缩进)，<br\>
+可配置功能键及语法详见 [项目地址](https://github.com/StarFreedomX/starfx-bot)或[npm发布页](https://www.npmjs.com/package/koishi-plugin-bangdream-ccg)`),
+  }).description('高级配置')
 ])
 
 export const usage =
-  `<h5>StarFreedomX的自用插件 放了一些小功能</h5>
+  `<h2>StarFreedomX的自用插件 放了一些小功能</h2>
   `
 
 export function apply(ctx: Context, cfg: Config) {
@@ -63,100 +91,133 @@ export function apply(ctx: Context, cfg: Config) {
   initAssets();
   // write your plugin here
 
+  const controlJson = utils.parseJsonControl(cfg.featureControl)
+
   if (cfg.openLock) {
     ctx.command('封印 [param]')
       .action(async ({session}, param) => {
-        return await utils.drawLock(ctx, await utils.getImageSrc(session, param));
+        if (utils.detectControl(controlJson, session.guildId, "lock"))
+          return await utils.drawLock(ctx, await utils.getImageSrc(session, param));
       })
   }
   if (cfg.openSold) {
     ctx.command('卖掉了 [param]')
       .action(async ({session}, param) => {
-        return await utils.drawSold(ctx, await utils.getImageSrc(session, param));
+        if (utils.detectControl(controlJson, session.guildId, "sold"))
+          return await utils.drawSold(ctx, await utils.getImageSrc(session, param));
+      })
+  }
+
+  if (cfg.roll) {
+    ctx.command('roll <param:text>')
+      .action(async ({session}, param) => {
+        if (utils.detectControl(controlJson, session.guildId, "roll")) {
+          if (!param) return session.text('.noParam')
+          if (param.endsWith('的概率')) {
+
+          }
+          const parts = param.split(/(?:\s+|还是)+/).filter(Boolean)
+          if (parts.length > 1) {
+
+          } else {
+            const items = param.split('r');
+            if (items.length === 2) {
+              const num = parseInt(items[0]);
+              const noodles = parseInt(items[1]);
+            }
+          }
+        }
       })
   }
 
   if (cfg.bangdreamBorder) {
-    ctx.command('bangdreamborder [param]')
-      .alias('bdbd')
+    ctx.command('bdbd [param]')
       .option('starNum', '-n <starNum: number>')
       .option('color', '-c <color: string>')
       .option('train', '-t <train: string>')
       .option('band', '-b <band: string>')
       .action(async ({session, options}, param) => {
-        const p = session.send('图片处理中请稍等...')
-        console.log(param)
-        const drawConfig = await utils.handleBanGDreamConfig(options);
-        const imageBase64: string = await utils.drawBanGDream(await utils.getImageSrc(session, param), drawConfig);
-        await p;
-        return h.image(imageBase64)
+        if (utils.detectControl(controlJson, session.guildId, "bdbd")) {
+          const p = session.send('图片处理中请稍等...')
+          console.log(param)
+          const drawConfig = await utils.handleBanGDreamConfig(options);
+          const imageBase64: string = await utils.drawBanGDream(await utils.getImageSrc(session, param), drawConfig);
+          await p;
+          return h.image(imageBase64)
+        }
       })
   }
 
   if (cfg.record) {
     ctx.command('投稿 [param]')
-    .action(async ({session}, param) => {
-      const imageSrc = await utils.getImageSrc(session, param,
-        {
-          img: true,
-          at: false,
-          quote: true,
-          noParam: false,
-          number: false
-        });
-      if (!imageSrc) {return '请发送带图片的指令消息或引用图片消息进行投稿'}
-      return await utils.addRecord(ctx, session.gid.replace(':', '_'), imageSrc);
-      //console.log('oooooo')
-      //return h.image('https://bestdori.com/assets/jp/musicjacket/musicjacket600_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket600-596_sensenfukoku_super-jacket.png')
-    })
-    ctx.command('语录')
-    .action(async ({session}) => {
-        const filepath = await utils.getRecord(session.gid.replace(':', '_'));
-        starfxLogger.info(`send record: ${filepath}`);
-        if (!filepath) return '暂无语录呢';
-        return h.image(filepath);
-    })
-  }
-
-  if (cfg.saveArchive){
-    ctx.command('入典 [param]')
       .action(async ({session}, param) => {
-        const imageSrc = await utils.getImageSrc(session, param,
-          {
-            img: true,
-            at: false,
-            quote: true,
-            noParam: false,
-            number: false
-          });
-        if (!imageSrc) {return '请发送带图片的指令消息或引用图片消息进行投稿'}
-
-    })
+        if (utils.detectControl(controlJson, session.guildId, "record")){
+          const imageSrc = await utils.getImageSrc(session, param,
+            {
+              img: true,
+              at: false,
+              quote: true,
+              noParam: false,
+              number: false
+            });
+          if (!imageSrc) {
+            return '请发送带图片的指令消息或引用图片消息进行投稿'
+          }
+          return await utils.addRecord(ctx, session.gid.replace(':', '_'), imageSrc);
+          //return h.image('https://bestdori.com/assets/jp/musicjacket/musicjacket600_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket600-596_sensenfukoku_super-jacket.png')
+        }
+      })
+    ctx.command('语录')
+      .action(async ({session}) => {
+        if (utils.detectControl(controlJson, session.guildId, "record")){
+          const filepath = await utils.getRecord(session.gid.replace(':', '_'));
+          starfxLogger.info(`send record: ${filepath}`);
+          if (!filepath) return '暂无语录呢';
+          return h.image(filepath);
+        }
+      })
   }
+
+  /*  if (cfg.saveArchive){
+      ctx.command('入典 [param]')
+        .action(async ({session}, param) => {
+          const imageSrc = await utils.getImageSrc(session, param,
+            {
+              img: true,
+              at: false,
+              quote: true,
+              noParam: false,
+              number: false
+            });
+          if (!imageSrc) {return '请发送带图片的指令消息或引用图片消息进行投稿'}
+          return await utils.addRecord(ctx, session.gid.replace(':', '_'), imageSrc);
+
+      })
+    }*/
 
   ctx.middleware(async (session, next) => {
     const elements = session.elements;
-    if(cfg.openRepeat){
+    if (cfg.openRepeat && utils.detectControl(controlJson, session.guildId, "repeat")) {
       const content = session.content;
       const ctxArr = repeatContextMap.get(session.gid);
       if (!ctxArr || ctxArr[0] !== content) {
         //初始化 存储到上下文中
         repeatContextMap.set(session.gid, [content, 1]);
-      }else{
+      } else {
         //here groupMap[0]===content
-        if (ctxArr[1] !== -1 && ++ctxArr[1] >= cfg.minRepeatTimes && Random.bool(cfg.repeatPossibility)){
+        if (ctxArr[1] !== -1 && ++ctxArr[1] >= cfg.minRepeatTimes && Random.bool(cfg.repeatPossibility)) {
           ctxArr[1] = -1;
           await session.send(content);
         }
       }
     }
 
-
-    await utils.atNotSayReply(cfg, session, elements);
-
-    await utils.replyBot(cfg, session, elements);
-
-    await utils.iLoveYou(cfg, session, elements);
+    if (utils.detectControl(controlJson, session.guildId, "atNotSay"))
+      await utils.atNotSayReply(cfg, session, elements);
+    if (utils.detectControl(controlJson, session.guildId, "replyBot"))
+      await utils.replyBot(cfg, session, elements);
+    if (utils.detectControl(controlJson, session.guildId, "iLoveYou"))
+      await utils.iLoveYou(cfg, session, elements);
 
     return next();
   });

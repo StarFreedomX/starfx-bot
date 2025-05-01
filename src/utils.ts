@@ -3,7 +3,15 @@ import fs from "fs";
 import path from "node:path";
 import sharp from "sharp";
 import {Jimp} from "jimp";
-import {assetsDir, baseDir, Config} from "./index";
+import {assetsDir, baseDir, Config, starfxLogger} from "./index";
+
+//功能控制
+interface FeatureControl {
+  [feature: string]: {
+    whitelist: boolean
+    groups: number[]
+  }
+}
 
 /**
  * 添加投稿
@@ -430,4 +438,22 @@ export async function drawBanGDream(avatar: string, inputOptions?: {
     times--;
   }
   return `data:image/png;base64,${(await image.getBuffer("image/jpeg")).toString("base64")}`;
+}
+
+export function parseJsonControl(text: string): FeatureControl | null {
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    starfxLogger.warn('[功能控制] JSON 解析失败')
+    return null;
+  }
+}
+
+export function detectControl(controlJson: FeatureControl, guildId: string, funName: string) {
+  const rule = controlJson?.[funName];
+  if (!rule || rule.whitelist === undefined || !Array.isArray(rule.groups)) {
+    return true; // 未配置或配置无效 -> 默认允许
+  }
+  const inList = rule.groups.includes(Number(guildId));
+  return rule.whitelist ? inList : !inList
 }
