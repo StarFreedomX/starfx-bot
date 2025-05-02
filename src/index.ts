@@ -52,7 +52,7 @@ export const Config = Schema.intersect([
     //saveArchive: Schema.boolean().default(false).description('开启入典功能').hidden(),
   }).description('语录记录功能'),
   Schema.object({
-    roll: Schema.boolean().default(false).description('开启roll随机数功能').hidden(),
+    roll: Schema.boolean().default(true).description('开启roll随机数功能'),
   }).description('指令小功能'),
   Schema.object({
     atNotSay: Schema.boolean().default(true).description('开启‘艾特我又不说话’功能'),
@@ -109,23 +109,10 @@ export function apply(ctx: Context, cfg: Config) {
   }
 
   if (cfg.roll) {
-    ctx.command('roll <param:text>')
-      .action(async ({session}, param) => {
+    ctx.command('roll')
+      .action(async ({session}) => {
         if (utils.detectControl(controlJson, session.guildId, "roll")) {
-          if (!param) return session.text('.noParam')
-          if (param.endsWith('的概率')) {
-
-          }
-          const parts = param.split(/(?:\s+|还是)+/).filter(Boolean)
-          if (parts.length > 1) {
-
-          } else {
-            const items = param.split('r');
-            if (items.length === 2) {
-              const num = parseInt(items[0]);
-              const noodles = parseInt(items[1]);
-            }
-          }
+          return utils.handleRoll(session)
         }
       })
   }

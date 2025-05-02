@@ -19,7 +19,7 @@ interface FeatureControl {
  * @param gid 当前群组的gid，注意需要把:替换为_等其它字符
  * @param avatarUrl 图片的Url网络地址
  */
-export async function addRecord(ctx: Context, gid: string, avatarUrl: string) {
+export async function addRecord(ctx: Context, gid: string, avatarUrl: string): Promise<string> {
   const recordDir = `${assetsDir}/record/${gid}`;
   const avatarBuffer = await ctx.http.get(avatarUrl, {responseType: 'arraybuffer'});
   saveImage(avatarBuffer, recordDir);
@@ -456,4 +456,72 @@ export function detectControl(controlJson: FeatureControl, guildId: string, funN
   }
   const inList = rule.groups.includes(Number(guildId));
   return rule.whitelist ? inList : !inList
+}
+
+export function handleRoll(session: Session) {
+
+  // 提取元素内容
+  const elements = session.elements;
+  let parts = [];
+
+  // 处理不同类型的元素
+  for (const element of elements) {
+    if (element?.type === 'text') {
+      parts.push(...element.attrs.content.split(/(?:\s+)+/).filter(Boolean));
+    }else{
+      parts.push(element);
+    }
+  }
+  const commandLength = parts[0].length;
+  console.log(parts)
+
+  // 移除第一个元素(通常是命令本身)
+  parts.shift();
+
+
+  // 参数检查
+  if (!parts) return session.text('.noParam');
+  const last = session.elements[session.elements.length - 1];
+  // 移除开头的命令
+  // 处理概率计算
+  if (last?.type === 'text' && last?.attrs?.content?.endsWith('的概率') && last?.attrs?.content?.length > 3) {
+    return session.text('.possibility', {
+      param: parts,
+      possibility: Math.floor(Math.random() * 10000 + 1) / 100
+    });
+  }
+
+  // 处理骰子掷点
+  const items = parts.join(' ').split('r');
+  if (items.length === 2) {
+    const [num, noodles] = items.map(Number);
+    return getPoints(session, num, noodles);
+  }
+
+  const newParts = []
+  // 处理多选一
+  parts.forEach((element) => {
+    if (typeof element === 'string') {
+      newParts.push(...element.split(/(?:、|还是|，|,)+/).filter(Boolean));
+    }else {
+      newParts.push(element);
+    }
+  })
+  if (newParts.length > 1) {
+    return session.text('.choose', {
+      option: Random.pick(newParts)
+    });
+  }
+  return session.text('.noParam');
+}
+
+function getPoints(session: Session, num: number, noodles: number) {
+  if (isNaN(num) || isNaN(noodles)) return session.text('.invalid');
+  if (num > 20 || noodles > 100000000) return session.text('.too-many');
+  const points = Array(num).fill(0).map(() => Math.floor(Math.random() * noodles + 1));
+  return session.text('.noodles', {
+    num,
+    noodles,
+    points: points.join(', ')
+  });
 }

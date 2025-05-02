@@ -1,7 +1,12 @@
 commands:
   roll:
     messages:
-      noParam: '请输入要随机的对象'
+      noParam: '你问啥?'
+      invalid: '你要不看看你说的是啥'
+      too-many: '太、太多了啦!'
+      noodles: '扔出了{num}个{noodles}面的骰子，点数如下:{points}'
+      possibility: '{param}是{possibility}%'
+      choose: '当然是{option}啦!'
 middleware:
   messages:
     atNotReply: '艾特我又不说话'
