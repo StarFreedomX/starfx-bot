@@ -35,7 +35,7 @@ export interface Config {
   openRepeat: boolean,
   minRepeatTimes: number,
   repeatPossibility: number,
-  //saveArchive: boolean,
+  saveArchive: boolean,
 
   //功能控制
   featureControl: string,
@@ -49,7 +49,7 @@ export const Config = Schema.intersect([
   }).description('绘图功能'),
   Schema.object({
     record: Schema.boolean().default(true).description('开启群语录功能'),
-    //saveArchive: Schema.boolean().default(false).description('开启入典功能').hidden(),
+    saveArchive: Schema.boolean().default(false).description('开启入典功能').hidden(),
   }).description('语录记录功能'),
   Schema.object({
     roll: Schema.boolean().default(true).description('开启roll随机数功能'),
@@ -138,7 +138,7 @@ export function apply(ctx: Context, cfg: Config) {
   if (cfg.record) {
     ctx.command('投稿 [param]')
       .action(async ({session}, param) => {
-        if (utils.detectControl(controlJson, session.guildId, "record")){
+        if (utils.detectControl(controlJson, session.guildId, "record")) {
           const imageSrc = await utils.getImageSrc(session, param,
             {
               img: true,
@@ -151,36 +151,30 @@ export function apply(ctx: Context, cfg: Config) {
             return '请发送带图片的指令消息或引用图片消息进行投稿'
           }
           return await utils.addRecord(ctx, session.gid.replace(':', '_'), imageSrc);
-          //return h.image('https://bestdori.com/assets/jp/musicjacket/musicjacket600_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket600-596_sensenfukoku_super-jacket.png')
         }
       })
     ctx.command('语录')
       .action(async ({session}) => {
-        if (utils.detectControl(controlJson, session.guildId, "record")){
+        if (utils.detectControl(controlJson, session.guildId, "record")) {
           const filepath = await utils.getRecord(session.gid.replace(':', '_'));
           starfxLogger.info(`send record: ${filepath}`);
           if (!filepath) return '暂无语录呢';
           return h.image(filepath);
         }
-      })
+      });
   }
 
-  /*  if (cfg.saveArchive){
-      ctx.command('入典 [param]')
-        .action(async ({session}, param) => {
-          const imageSrc = await utils.getImageSrc(session, param,
-            {
-              img: true,
-              at: false,
-              quote: true,
-              noParam: false,
-              number: false
-            });
-          if (!imageSrc) {return '请发送带图片的指令消息或引用图片消息进行投稿'}
-          return await utils.addRecord(ctx, session.gid.replace(':', '_'), imageSrc);
-
+  if (cfg.saveArchive) {
+    ctx.command('入典')
+      .action(async ({session}) => {
+        if (!session.quote) return '请引用合并转发聊天记录进行入典';
+        //await session.send(session.quote.elements);
+        //console.log(session.quote.elements);
+        //console.log(session.quote.elements[0].attrs.content);
+        //await utils.sendForward(ctx, session, session.quote.elements[0].attrs.content);
+        //utils.saveArchive(session.quote.elements, session.gid.replace(':', '_'), session)
       })
-    }*/
+  }
 
   ctx.middleware(async (session, next) => {
     const elements = session.elements;

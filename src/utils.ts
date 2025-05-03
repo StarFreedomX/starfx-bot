@@ -516,7 +516,7 @@ export function handleRoll(session: Session) {
 }
 
 function getPoints(session: Session, num: number, noodles: number) {
-  if (isNaN(num) || isNaN(noodles)) return session.text('.invalid');
+  if (!Number.isInteger(num) || !Number.isInteger(noodles) || num < 0 || noodles > 0) return session.text('.invalid');
   if (num > 20 || noodles > 100000000) return session.text('.too-many');
   const points = Array(num).fill(0).map(() => Math.floor(Math.random() * noodles + 1));
   return session.text('.noodles', {
@@ -524,4 +524,8 @@ function getPoints(session: Session, num: number, noodles: number) {
     noodles,
     points: points.join(', ')
   });
+}
+
+export function saveArchive(quoteElements: h[], gid: string, session: Session) {
+
 }
