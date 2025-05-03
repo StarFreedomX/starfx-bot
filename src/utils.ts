@@ -467,24 +467,32 @@ export function handleRoll(session: Session) {
   // 处理不同类型的元素
   for (const element of elements) {
     if (element?.type === 'text') {
-      parts.push(...element.attrs.content.split(/(?:\s+)+/).filter(Boolean));
+      let str = element.attrs.content;
+      // 找一个不会出现在原字符串中的占位符
+      let placeholder = '__TEMP__';
+      while (str.includes(placeholder)) {
+        placeholder += '_X';
+      }
+      str = str.replace(/我/g, placeholder)
+        .replace(/你/g, '我')
+        .replace(new RegExp(placeholder, 'g'), '你');
+
+      parts.push(...str.split(/(?:\s+)+/).filter(Boolean));
     }else{
       parts.push(element);
     }
   }
-  const commandLength = parts[0].length;
   console.log(parts)
 
   // 移除第一个元素(通常是命令本身)
   parts.shift();
-
 
   // 参数检查
   if (!parts) return session.text('.noParam');
   const last = session.elements[session.elements.length - 1];
   // 移除开头的命令
   // 处理概率计算
-  if (last?.type === 'text' && last?.attrs?.content?.endsWith('的概率') && last?.attrs?.content?.length > 3) {
+  if (last?.type === 'text' && last?.attrs?.content?.endsWith('概率') && last?.attrs?.content?.length > 3) {
     return session.text('.possibility', {
       param: parts,
       possibility: Math.floor(Math.random() * 10000 + 1) / 100
@@ -492,7 +500,7 @@ export function handleRoll(session: Session) {
   }
 
   // 处理骰子掷点
-  const items = parts.join(' ').split('r');
+  const items = parts.join(' ').split('r').filter(Boolean);
   if (items.length === 2) {
     const [num, noodles] = items.map(Number);
     return getPoints(session, num, noodles);
@@ -526,6 +534,6 @@ function getPoints(session: Session, num: number, noodles: number) {
   });
 }
 
-export function saveArchive(quoteElements: h[], gid: string, session: Session) {
+/*export function saveArchive(quoteElements: h[], gid: string, session: Session) {
 
-}
+}*/
