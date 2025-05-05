@@ -19,9 +19,11 @@ export interface Config {
 
   //语录
   record: boolean,
+  saveArchive: boolean,
 
-  //随机数
+  //指令小功能
   roll: boolean,
+  undo: boolean,
 
   //回应
   atNotSay: boolean,
@@ -35,7 +37,6 @@ export interface Config {
   openRepeat: boolean,
   minRepeatTimes: number,
   repeatPossibility: number,
-  saveArchive: boolean,
 
   //功能控制
   featureControl: string,
@@ -53,6 +54,7 @@ export const Config = Schema.intersect([
   }).description('语录记录功能'),
   Schema.object({
     roll: Schema.boolean().default(true).description('开启roll随机数功能'),
+    undo: Schema.boolean().default(true).description('机器人撤回消息功能'),
   }).description('指令小功能'),
   Schema.object({
     atNotSay: Schema.boolean().default(true).description('开启‘艾特我又不说话’功能'),
@@ -176,6 +178,15 @@ export function apply(ctx: Context, cfg: Config) {
       })
   }
 
+  if(cfg.undo){
+    ctx.command('undo')
+      .alias('撤回')
+      .action(async ({session}) => {
+        if (utils.detectControl(controlJson, session.guildId, "undo"))
+          await utils.undo(cfg, session);
+      })
+  }
+
   ctx.middleware(async (session, next) => {
     const elements = session.elements;
     if (cfg.openRepeat && utils.detectControl(controlJson, session.guildId, "repeat")) {
@@ -199,7 +210,6 @@ export function apply(ctx: Context, cfg: Config) {
       await utils.replyBot(cfg, session, elements);
     if (utils.detectControl(controlJson, session.guildId, "iLoveYou"))
       await utils.iLoveYou(cfg, session, elements);
-
     return next();
   });
 

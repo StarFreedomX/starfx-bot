@@ -534,6 +534,18 @@ function getPoints(session: Session, num: number, noodles: number) {
   });
 }
 
+/**
+ * qq撤回功能（其他平台不知道w
+ * @param cfg config
+ * @param session session
+ */
+export async function undo(cfg: Config, session: Session) {
+    if (session?.quote?.id && session.quote.user.id === session.selfId && Date.now() - session.quote.timestamp < 2*60*1000-5*1000){
+      //console.log(Date.now() - session.quote.timestamp)
+      await session.bot.deleteMessage(session.channelId || session.guildId, session.quote.id);
+  }
+}
+
 /*export function saveArchive(quoteElements: h[], gid: string, session: Session) {
 
 }*/
