@@ -130,7 +130,9 @@ export function apply(ctx: Context, cfg: Config) {
           const p = session.send('图片处理中请稍等...')
           console.log(param)
           const drawConfig = await utils.handleBanGDreamConfig(options);
-          const imageBase64: string = await utils.drawBanGDream(await utils.getImageSrc(session, param), drawConfig);
+          const imgSrc = await utils.getImageSrc(session, param);
+          if (!imgSrc?.length)return '输入无效';
+          const imageBase64: string = await utils.drawBanGDream(imgSrc, drawConfig);
           await p;
           return h.image(imageBase64)
         }
