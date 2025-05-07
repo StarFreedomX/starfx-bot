@@ -192,16 +192,18 @@ export function apply(ctx: Context, cfg: Config) {
   ctx.middleware(async (session, next) => {
     const elements = session.elements;
     if (cfg.openRepeat && utils.detectControl(controlJson, session.guildId, "repeat")) {
-      const content = session.content;
-      const ctxArr = repeatContextMap.get(session.gid);
-      if (!ctxArr || ctxArr[0] !== content) {
-        //初始化 存储到上下文中
+      const content = session.content;//获取消息内容
+      const ctxArr = repeatContextMap.get(session.gid);//获取上下文中存储的对话内容及次数
+      if (!ctxArr || ctxArr[0] !== content) {//不存在上下文或两次消息不同
+        //初始化/重置 存储到上下文中
         repeatContextMap.set(session.gid, [content, 1]);
-      } else {
-        //here groupMap[0]===content
+      } else {//两次消息相同
+        //times不为-1且times自加1之后大于设定的最小幅度次数
+        //执行概率为repeatPossibility的随机布尔值
         if (ctxArr[1] !== -1 && ++ctxArr[1] >= cfg.minRepeatTimes && Random.bool(cfg.repeatPossibility)) {
+          //times置为-1防止重复复读
           ctxArr[1] = -1;
-          await session.send(content);
+          await session.send(content);//复读
         }
       }
     }

@@ -128,15 +128,6 @@ export async function getImageSrc(session: Session, param: string, option?:{
   } else if (noParam && !param?.length) {
     return `https://q1.qlogo.cn/g?b=qq&nk=${session.userId}&s=640`;
   }
-  //发送的消息中选择
-  const elementArray = session.elements;
-  for (const element of elementArray) {
-    if (img && element?.type === 'img') {
-      return element?.attrs?.src;
-    } else if (at && element?.type === 'at' && element?.attrs?.id) {
-      return `https://q1.qlogo.cn/g?b=qq&nk=${element.attrs.id}&s=640`;
-    }
-  }
   if(quote){
     //引用的消息中选择
     const quoteElementArray = session?.quote?.elements;
@@ -150,6 +141,16 @@ export async function getImageSrc(session: Session, param: string, option?:{
       }
     }
   }
+  //发送的消息中选择
+  const elementArray = session.elements;
+  for (const element of elementArray) {
+    if (img && element?.type === 'img') {
+      return element?.attrs?.src;
+    } else if (at && element?.type === 'at' && element?.attrs?.id) {
+      return `https://q1.qlogo.cn/g?b=qq&nk=${element.attrs.id}&s=640`;
+    }
+  }
+
   //没有那么返回空值
   return '';
 
