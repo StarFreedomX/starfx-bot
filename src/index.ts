@@ -24,6 +24,7 @@ export interface Config {
   //指令小功能
   roll: boolean,
   undo: boolean,
+  echo: boolean,
 
   //回应
   atNotSay: boolean,
@@ -55,6 +56,7 @@ export const Config = Schema.intersect([
   Schema.object({
     roll: Schema.boolean().default(true).description('开启roll随机数功能'),
     undo: Schema.boolean().default(true).description('机器人撤回消息功能'),
+    echo: Schema.boolean().default(true).description('echo回声洞功能')
   }).description('指令小功能'),
   Schema.object({
     atNotSay: Schema.boolean().default(true).description('开启‘艾特我又不说话’功能'),
@@ -117,6 +119,21 @@ export function apply(ctx: Context, cfg: Config) {
           return utils.handleRoll(session)
         }
       })
+  }
+
+  if (cfg.echo){
+    ctx.command('echo <params>')
+    .action(async ({session}, params) => {
+      if (utils.detectControl(controlJson, session.guildId, "echo")){
+        const elements = session.elements;
+        try{
+          elements[0].attrs.content = elements[0].attrs?.content.split(" ").slice(1).join(" ");
+          return elements;
+        }catch(e){
+          return params;
+        }
+      }
+    })
   }
 
   if (cfg.bangdreamBorder) {
