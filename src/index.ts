@@ -19,6 +19,7 @@ export interface Config {
 
   //语录
   record: boolean,
+  tagWeight: number,
   saveArchive: boolean,
 
   //指令小功能
@@ -51,6 +52,7 @@ export const Config = Schema.intersect([
   }).description('绘图功能'),
   Schema.object({
     record: Schema.boolean().default(true).description('开启群语录功能'),
+    tagWeight: Schema.number().default(5).min(1).description('tag匹配时的权重，越高权重越大'),
     saveArchive: Schema.boolean().default(false).description('开启入典功能').hidden(),
   }).description('语录记录功能'),
   Schema.object({
@@ -174,10 +176,10 @@ export function apply(ctx: Context, cfg: Config) {
           return await utils.addRecord(ctx, session.gid.replace(':', '_'), imageSrc);
         }
       })
-    ctx.command('语录')
-      .action(async ({session}) => {
+    ctx.command('语录 [tag:string]')
+      .action(async ({session}, tag) => {
         if (utils.detectControl(controlJson, session.guildId, "record")) {
-          const filepath = await utils.getRecord(session.gid.replace(':', '_'));
+          const filepath = await utils.getRecord(cfg, session.gid.replace(':', '_'), tag);
           starfxLogger.info(`send record: ${filepath}`);
           if (!filepath) return '暂无语录呢';
           return h.image(filepath);
@@ -233,6 +235,13 @@ export function apply(ctx: Context, cfg: Config) {
       await utils.iLoveYou(cfg, session, elements);
     return next();
   });
+
+  if(process.env.NODE_ENV === 'development') {
+    ctx.command('test')
+      .action(async ({session}) => {
+        await session.send(h.video("https://video.twimg.com/amplify_video/1920672748596043776/vid/avc1/1080x1920/c3BNP3qg4-sT82fR.mp4?tag=21"))
+      })
+  }
 
   function initAssets() {
     const fromUrl = `${__dirname}/../assets`;

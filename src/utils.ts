@@ -13,6 +13,10 @@ interface FeatureControl {
   }
 }
 
+interface tagConfig{
+  [gid: string]: string[]
+}
+
 /**
  * 添加投稿
  * @param ctx Context
@@ -28,14 +32,52 @@ export async function addRecord(ctx: Context, gid: string, avatarUrl: string): P
 
 /**
  * 从当前群组的语录中随机获取一张，同样需要把gid的:替换为_
+ * @param cfg
  * @param gid
+ * @param tag
  * @return 图片的文件路径
  */
-export async function getRecord(gid: string){
-  const recordDir = `${assetsDir}/record/${gid}`;
-  const files = fs.readdirSync(recordDir);
-  return files?.length ? path.join(recordDir, Random.pick(files)) : null;
+export async function getRecord(cfg: Config, gid: string, tag: string): Promise<string | null> {
+  const tagConfigPath = path.join(assetsDir, "tagConfig", `${gid}.json`);
+  const recordDir = path.join(assetsDir, "record", gid);
+
+  if (!fs.existsSync(recordDir)) return null;
+
+  const files = fs.readdirSync(recordDir).filter(file => /\.(png|jpe?g|webp|gif)$/i.test(file));
+  if (!files.length) return null;
+
+  let weightedFiles: string[] = [];
+
+  // 如果 tag 存在且 config 存在
+  if (tag && fs.existsSync(tagConfigPath)) {
+    const tagConfigJson: tagConfig = JSON.parse(fs.readFileSync(tagConfigPath, "utf8") || "{}");
+
+    files.forEach(file => {
+      const name = path.parse(file).name;
+      const tags = tagConfigJson[name] || [];
+
+      if (tags.includes(tag)) {
+        // 权重更高：加入 5 次
+        for (let i = 0; i < cfg.tagWeight; i++) {
+          weightedFiles.push(file);
+          //console.log(`${file.toString()} - match ${tag} add+++++`)
+        }
+
+      } else {
+        // 普通权重：加入 1 次
+        weightedFiles.push(file);
+        //console.log(`${file.toString()} - don't match ${tag} add+`)
+      }
+    });
+  } else {
+    // 没 tag 的情况：均匀分布
+    weightedFiles = files;
+  }
+
+  const selected = Random.pick(weightedFiles);
+  return selected ? path.join(recordDir, selected) : null;
 }
+
 
 /**
  * 返回当前日期，格式为yyyyMMdd
