@@ -207,7 +207,7 @@ export async function handleBanGDreamConfig(options) {
   const types = {
     cool: ['cool', 'blue', '蓝', '蓝色'],
     powerful: ['powerful', 'red', '红', '红色'],
-    peer: ['peer', 'green', '绿', '绿色'],
+    pure: ['pure', 'green', '绿', '绿色'],
     happy: ['happy', 'orange', '橙', '橙色'],
   }
   const bands = {
