@@ -46,37 +46,32 @@ export async function getRecord(cfg: Config, gid: string, tag: string): Promise<
   const files = fs.readdirSync(recordDir).filter(file => /\.(png|jpe?g|webp|gif)$/i.test(file));
   if (!files.length) return null;
 
-  let weightedFiles: string[] = [];
+  const tagConfigJson: tagConfig = fs.existsSync(tagConfigPath)
+    ? JSON.parse(fs.readFileSync(tagConfigPath, "utf8") || "{}")
+    : {};
 
-  // 如果 tag 存在且 config 存在
-  if (tag && fs.existsSync(tagConfigPath)) {
-    const tagConfigJson: tagConfig = JSON.parse(fs.readFileSync(tagConfigPath, "utf8") || "{}");
+  // 构造带权重的条目
+  const weighted: { file: string; weight: number }[] = files.map(file => {
+    const name = path.parse(file).name;
+    const tags = tagConfigJson[name] || [];
+    const weight = tag && tags.includes(tag) ? cfg.tagWeight : 1;
+    return { file, weight };
+  });
 
-    files.forEach(file => {
-      const name = path.parse(file).name;
-      const tags = tagConfigJson[name] || [];
+  // 加权随机选择
+  const totalWeight = weighted.reduce((acc, cur) => acc + cur.weight, 0);//求和
+  let rand = Math.random() * totalWeight;//随机
 
-      if (tags.includes(tag)) {
-        // 权重更高：加入 5 次
-        for (let i = 0; i < cfg.tagWeight; i++) {
-          weightedFiles.push(file);
-          //console.log(`${file.toString()} - match ${tag} add+++++`)
-        }
-
-      } else {
-        // 普通权重：加入 1 次
-        weightedFiles.push(file);
-        //console.log(`${file.toString()} - don't match ${tag} add+`)
-      }
-    });
-  } else {
-    // 没 tag 的情况：均匀分布
-    weightedFiles = files;
+  for (const item of weighted) {
+    rand -= item.weight;
+    if (rand <= 0) {
+      return path.join(recordDir, item.file);
+    }
   }
 
-  const selected = Random.pick(weightedFiles);
-  return selected ? path.join(recordDir, selected) : null;
+  return null;
 }
+
 
 
 /**
