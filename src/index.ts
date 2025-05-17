@@ -103,14 +103,14 @@ export function apply(ctx: Context, cfg: Config) {
     ctx.command('封印 [param]')
       .action(async ({session}, param) => {
         if (utils.detectControl(controlJson, session.guildId, "lock"))
-          return await utils.drawLock(ctx, await utils.getImageSrc(session, param));
+          await session.send(await utils.drawLock(ctx, await utils.getImageSrc(session, param)));
       })
   }
   if (cfg.openSold) {
     ctx.command('卖掉了 [param]')
       .action(async ({session}, param) => {
         if (utils.detectControl(controlJson, session.guildId, "sold"))
-          return await utils.drawSold(ctx, await utils.getImageSrc(session, param));
+          await session.send(await utils.drawSold(ctx, await utils.getImageSrc(session, param)));
       })
   }
 
@@ -191,11 +191,6 @@ export function apply(ctx: Context, cfg: Config) {
     ctx.command('入典')
       .action(async ({session}) => {
         if (!session.quote) return '请引用合并转发聊天记录进行入典';
-        //await session.send(session.quote.elements);
-        //console.log(session.quote.elements);
-        //console.log(session.quote.elements[0].attrs.content);
-        //await utils.sendForward(ctx, session, session.quote.elements[0].attrs.content);
-        //utils.saveArchive(session.quote.elements, session.gid.replace(':', '_'), session)
       })
   }
 
