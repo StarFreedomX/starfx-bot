@@ -153,7 +153,7 @@ export function apply(ctx: Context, cfg: Config) {
           if (!imgSrc?.length)return '输入无效';
           const imageBase64: string = await utils.drawBanGDream(imgSrc, drawConfig);
           await p;
-          return h.image(imageBase64)
+          await session.send(h.image(imageBase64))
         }
       })
   }
@@ -182,7 +182,7 @@ export function apply(ctx: Context, cfg: Config) {
           const filepath = await utils.getRecord(cfg, session.gid.replace(':', '_'), tag);
           starfxLogger.info(`send record: ${filepath}`);
           if (!filepath) return '暂无语录呢';
-          return h.image(filepath);
+          await session.send(h.image(filepath));
         }
       });
   }
