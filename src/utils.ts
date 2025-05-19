@@ -173,7 +173,7 @@ export async function getImageSrc(session: Session, param: string, option?:{
       for (const element of quoteElementArray) {
         if (img && element?.type === 'img') {
           //console.log(element?.attrs?.src.slice(0,1000))
-          //return element?.attrs?.src;
+          return element?.attrs?.src;
         } else if (at && element?.type === 'at' && element?.attrs?.id && element.attrs.id !== session.selfId) {
           return `https://q1.qlogo.cn/g?b=qq&nk=${element?.attrs?.id}&s=640`;
         }
