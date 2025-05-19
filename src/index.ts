@@ -147,11 +147,12 @@ export function apply(ctx: Context, cfg: Config) {
       .action(async ({session, options}, param) => {
         if (utils.detectControl(controlJson, session.guildId, "bdbd")) {
           const p = session.send('图片处理中请稍等...')
-          console.log(param)
+          console.log(param.slice(0,100))
           const drawConfig = await utils.handleBanGDreamConfig(options);
           const imgSrc = await utils.getImageSrc(session, param);
           if (!imgSrc?.length)return '输入无效';
           const imageBase64: string = await utils.drawBanGDream(imgSrc, drawConfig);
+          if (!imageBase64?.length) return '输入无效';
           await p;
           await session.send(h.image(imageBase64))
         }

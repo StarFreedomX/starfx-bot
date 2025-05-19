@@ -160,18 +160,20 @@ export async function getImageSrc(session: Session, param: string, option?:{
 
 
   //判断参数是不是纯数字或者没有参数
-  if (number && param?.length && param?.length === String(Number(param))?.length) {
+  if (number && param?.length && /^\d+$/.test(param)) {
     return `https://q1.qlogo.cn/g?b=qq&nk=${param}&s=640`;
   } else if (noParam && !param?.length) {
     return `https://q1.qlogo.cn/g?b=qq&nk=${session.userId}&s=640`;
   }
+
   if(quote){
     //引用的消息中选择
     const quoteElementArray = session?.quote?.elements;
     if (quoteElementArray?.length) {
       for (const element of quoteElementArray) {
         if (img && element?.type === 'img') {
-          return element?.attrs?.src;
+          //console.log(element?.attrs?.src.slice(0,1000))
+          //return element?.attrs?.src;
         } else if (at && element?.type === 'at' && element?.attrs?.id && element.attrs.id !== session.selfId) {
           return `https://q1.qlogo.cn/g?b=qq&nk=${element?.attrs?.id}&s=640`;
         }
@@ -187,7 +189,6 @@ export async function getImageSrc(session: Session, param: string, option?:{
       return `https://q1.qlogo.cn/g?b=qq&nk=${element.attrs.id}&s=640`;
     }
   }
-
   //没有那么返回空值
   return '';
 
@@ -448,9 +449,14 @@ export async function drawBanGDream(avatar: string, inputOptions?: {
   options.starType ||= options.starNum < 3 ? starTypes[0] : Random.pick(starTypes);
   options.border ||= `card-${starNums.includes(options.starNum) ? options.starNum : 5}${options.starNum == 1 ? `-${options.color}` : ''}`;
 
-
-  const [image, colorImage, bandImage, starImage, borderImage] = await Promise.all([
-    Jimp.read(avatar),
+  let image;
+  try{
+    image = await Jimp.read(avatar);
+  }catch (e){
+    starfxLogger.error(e);
+    return;
+  }
+  const [colorImage, bandImage, starImage, borderImage] = await Promise.all([
     Jimp.read(`${assetsDir}/bangborder/${options.color}.png`),
     Jimp.read(`${assetsDir}/bangborder/${options.band}.png`),
     Jimp.read(`${assetsDir}/bangborder/${options.starType}.png`),
