@@ -129,9 +129,9 @@ export function apply(ctx: Context, cfg: Config) {
       if (utils.detectControl(controlJson, session.guildId, "echo")){
         const elements = session.elements;
         try{
-          //console.log(elements);
+          console.log(elements);
           //第一个肯定是指令(其实可能是at)
-          while(elements[0].type === 'at') elements.shift();
+          while(elements[0].type === 'at' || (elements[0].type === 'text' && !elements[0].attrs?.content.trim())) elements.shift();
           elements[0].attrs.content = elements[0].attrs?.content.trim().split(" ").slice(1).join(" ");
           //console.log(elements);
           //如果什么内容都没有
