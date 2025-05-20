@@ -131,7 +131,7 @@ export function apply(ctx: Context, cfg: Config) {
         try{
           //console.log(elements);
           //第一个肯定是指令(其实可能是at)
-          if(elements[0].type === 'at')elements.shift();
+          while(elements[0].type === 'at') elements.shift();
           elements[0].attrs.content = elements[0].attrs?.content.trim().split(" ").slice(1).join(" ");
           //console.log(elements);
           //如果什么内容都没有
