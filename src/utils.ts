@@ -4,6 +4,12 @@ import path from "node:path";
 import sharp from "sharp";
 import {Jimp} from "jimp";
 import {assetsDir, baseDir, Config, starfxLogger} from "./index";
+import Parser from 'rss-parser';
+import * as cheerio from 'cheerio';
+import { HttpProxyAgent } from "http-proxy-agent";
+import { HttpsProxyAgent } from "https-proxy-agent";
+import axios from "axios";
+
 
 //功能控制
 interface FeatureControl {
@@ -12,6 +18,7 @@ interface FeatureControl {
     groups: number[]
   }
 }
+
 
 interface tagConfig{
   [gid: string]: string[]
@@ -588,6 +595,87 @@ export async function undo(cfg: Config, session: Session) {
       //console.log(Date.now() - session.quote.timestamp)
       await session.bot.deleteMessage(session.channelId || session.guildId, session.quote.id);
   }
+}
+
+
+
+export async function getXUrl(urls: string){
+  const regex = /https:\/\/x\.com\/([^\/]+)\/status\/(\d+)/g;
+  let match;
+  const results = [];
+
+  while ((match = regex.exec(urls)) !== null) {
+    const [fullUrl] = match;
+    results.push(fullUrl);
+  }
+  // console.log(results);
+  return results;
+}
+
+const parser = new Parser({
+  customFields: {
+    item: ['description', 'link']
+  }
+});
+
+export async function getXNum(session: Session){
+  const params = session.content.trim().split(' ').slice(1).filter(item => !isNaN(+item) && item).map(str => Number(str)-1);
+  //console.log(params);
+  return params;
+}
+
+export async function getXImage(rssUrl: string, xUrls: string | string[]){
+  const xUrlsArray = Array.isArray(xUrls) ? xUrls : [xUrls]
+
+  const feed = await parser.parseURL(rssUrl);
+  const allImageUrls: string[] = [];
+
+  for (const xUrl of xUrlsArray) {
+    const item = feed.items.find(i => i.link === xUrl);
+    if (item) {
+      const $ = cheerio.load(item.description);
+      $('img').each((_, el) => {
+        const src = $(el).attr('src');
+        if (src) allImageUrls.push(src);
+      });
+    }
+  }
+
+  return allImageUrls;
+}
+
+export function chunk<T>(arr: T[], size: number): T[][] {
+  const res: T[][] = []
+  for (let i = 0; i < arr.length; i += size) {
+    res.push(arr.slice(i, i + size))
+  }
+  return res
+}
+
+export async function sendImages(session: Session, cfg:Config, imageUrls: string[]) {
+  const chunks = chunk(imageUrls, 10)
+  for (const group of chunks) {
+    const messages = await Promise.all(
+      group.map(async (url) => h.image(await getXImageBase64(url, cfg)))
+    )
+    const message = messages.join('')
+    await session.send(message)
+  }
+}
+
+async function getXImageBase64(url: string, cfg: Config) {
+  const httpAgent = new HttpProxyAgent(cfg.proxyUrl);
+  const httpsAgent = new HttpsProxyAgent(cfg.proxyUrl);
+  axios.defaults.httpAgent = httpAgent;
+  axios.defaults.httpsAgent = httpsAgent;
+  const res = await axios.get(url,{responseType:'arraybuffer'})
+  const base64 = Buffer.from(res.data, 'binary').toString('base64')
+  const dataUrl = `data:image/png;base64,${base64}`
+  console.log('success')
+  return dataUrl;
+}
+export async function test(url: string) {
+
 }
 
 /*export function saveArchive(quoteElements: h[], gid: string, session: Session) {

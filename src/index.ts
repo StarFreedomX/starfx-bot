@@ -40,6 +40,11 @@ export interface Config {
   minRepeatTimes: number,
   repeatPossibility: number,
 
+  //自用功能
+  originImg: boolean,
+  originImgRSSUrl: string,
+  proxyUrl: string,
+
   //功能控制
   featureControl: string,
 }
@@ -77,6 +82,18 @@ export const Config = Schema.intersect([
       .min(0).max(1).step(0.01).default(0.3).description('复读发生概率'),
   }).description('复读功能'),
   Schema.object({
+    originImg: Schema.boolean().default(false).description('根据链接获取原图开关'),
+
+  }).description('自用功能'),
+  Schema.union([
+    Schema.object({
+      originImg: Schema.const(true).required(),
+      originImgRSSUrl: Schema.string().required().description('推特列表rss地址'),
+      proxyUrl: Schema.string().default('http://127.0.0.1:7890').description('代理地址'),
+    }),
+    Schema.object({}),
+  ]),
+  Schema.object({
     featureControl: Schema.string().role('textarea', {rows: [15]}).default('{\n\n}')
       .description(`黑/白名单配置，语法为JSON格式(可以不缩进)，<br\>
 可配置功能键及语法详见 [项目地址](https://github.com/StarFreedomX/starfx-bot)或[npm发布页](https://www.npmjs.com/package/koishi-plugin-bangdream-ccg)`),
@@ -109,6 +126,7 @@ export function apply(ctx: Context, cfg: Config) {
   if (cfg.openSold) {
     ctx.command('卖掉了 [param]')
       .action(async ({session}, param) => {
+        console.log('ssssss')
         if (utils.detectControl(controlJson, session.guildId, "sold"))
           await session.send(await utils.drawSold(ctx, await utils.getImageSrc(session, param)));
       })
@@ -123,27 +141,27 @@ export function apply(ctx: Context, cfg: Config) {
       })
   }
 
-  if (cfg.echo){
+  if (cfg.echo) {
     ctx.command('echo <params>')
-    .action(async ({session}, params) => {
-      if (utils.detectControl(controlJson, session.guildId, "echo")){
-        const elements = session.elements;
-        try{
-          console.log(elements);
-          //第一个肯定是指令(其实可能是at)
-          while(elements[0].type === 'at' || (elements[0].type === 'text' && !elements[0].attrs?.content.trim())) elements.shift();
-          elements[0].attrs.content = elements[0].attrs?.content.trim().split(" ").slice(1).join(" ");
-          //console.log(elements);
-          //如果什么内容都没有
-          if(elements.length == 1 && !elements[0].attrs.content?.length){
-            return session.quote?.elements;
+      .action(async ({session}, params) => {
+        if (utils.detectControl(controlJson, session.guildId, "echo")) {
+          const elements = session.elements;
+          try {
+            console.log(elements);
+            //第一个肯定是指令(其实可能是at)
+            while (elements[0].type === 'at' || (elements[0].type === 'text' && !elements[0].attrs?.content.trim())) elements.shift();
+            elements[0].attrs.content = elements[0].attrs?.content.trim().split(" ").slice(1).join(" ");
+            //console.log(elements);
+            //如果什么内容都没有
+            if (elements.length == 1 && !elements[0].attrs.content?.length) {
+              return session.quote?.elements;
+            }
+            return elements;
+          } catch (e) {
+            return params;
           }
-          return elements;
-        }catch(e){
-          return params;
         }
-      }
-    })
+      })
   }
 
   if (cfg.bangdreamBorder) {
@@ -155,10 +173,10 @@ export function apply(ctx: Context, cfg: Config) {
       .action(async ({session, options}, param) => {
         if (utils.detectControl(controlJson, session.guildId, "bdbd")) {
           const p = session.send('图片处理中请稍等...')
-          console.log(param?.slice(0,1000))
+          console.log(param?.slice(0, 1000))
           const drawConfig = await utils.handleBanGDreamConfig(options);
           const imgSrc = await utils.getImageSrc(session, param);
-          if (!imgSrc?.length)return '输入无效';
+          if (!imgSrc?.length) return '输入无效';
           const imageBase64: string = await utils.drawBanGDream(imgSrc, drawConfig);
           if (!imageBase64?.length) return '输入无效...';
           await p;
@@ -203,12 +221,33 @@ export function apply(ctx: Context, cfg: Config) {
       })
   }
 
-  if(cfg.undo){
+  if (cfg.undo) {
     ctx.command('undo')
       .alias('撤回')
       .action(async ({session}) => {
         if (utils.detectControl(controlJson, session.guildId, "undo"))
           await utils.undo(cfg, session);
+      })
+  }
+
+  if (cfg.originImg) {
+    ctx.command('获取X原图 <urls>')
+      .alias('推特原图')
+      .action(async ({session}, urls) => {
+        if (utils.detectControl(controlJson, session.guildId, "originImg")) {
+          let [xUrls, xIndex] = await Promise.all([
+            utils.getXUrl(session.quote.content),
+            utils.getXNum(session)
+          ]);
+          xIndex = xIndex.length ? xIndex : xUrls.map((_, i) => i);
+          console.log(`xIndex:${xIndex}`);
+          console.log(`xUrls:${xUrls}`);
+          const filteredUrls = xIndex.filter(i => i >= 0 && i < xUrls.length).map(i => xUrls[i]);
+          console.log(filteredUrls)
+          const imageUrls = await utils.getXImage(cfg.originImgRSSUrl, filteredUrls);
+          console.log(imageUrls);
+          await utils.sendImages(session, cfg, imageUrls);
+        }
       })
   }
 
@@ -240,10 +279,10 @@ export function apply(ctx: Context, cfg: Config) {
     return next();
   });
 
-  if(process.env.NODE_ENV === 'development') {
+  if (process.env.NODE_ENV === 'development') {
     ctx.command('test')
       .action(async ({session}) => {
-        await session.send(h.video("https://video.twimg.com/amplify_video/1920672748596043776/vid/avc1/1080x1920/c3BNP3qg4-sT82fR.mp4?tag=21"))
+
       })
   }
 
