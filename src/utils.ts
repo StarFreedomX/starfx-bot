@@ -6,8 +6,8 @@ import {Jimp} from "jimp";
 import {assetsDir, baseDir, Config, starfxLogger} from "./index";
 import Parser from 'rss-parser';
 import * as cheerio from 'cheerio';
-import { HttpProxyAgent } from "http-proxy-agent";
-import { HttpsProxyAgent } from "https-proxy-agent";
+import {HttpProxyAgent} from "http-proxy-agent";
+import {HttpsProxyAgent} from "https-proxy-agent";
 import axios from "axios";
 
 
@@ -619,9 +619,7 @@ const parser = new Parser({
 });
 
 export async function getXNum(session: Session){
-  const params = session.content.trim().split(' ').slice(1).filter(item => !isNaN(+item) && item).map(str => Number(str)-1);
-  //console.log(params);
-  return params;
+  return session.content.trim().split(' ').slice(1).filter(item => !isNaN(+item) && item).map(str => Number(str) - 1);
 }
 
 export async function getXImage(rssUrl: string, xUrls: string | string[]){
@@ -658,8 +656,12 @@ export async function sendImages(session: Session, cfg:Config, imageUrls: string
     const messages = await Promise.all(
       group.map(async (url) => h.image(await getXImageBase64(url, cfg)))
     )
-    const message = messages.join('')
-    await session.send(message)
+    if(messages.length > 0) {
+      const message = messages.join('')
+      await session.send(message)
+    }else{
+      await session.send('未找到图片，请引用包含图片且处于RSS列表中的的推特链接')
+    }
   }
 }
 

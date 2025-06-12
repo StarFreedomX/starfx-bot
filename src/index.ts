@@ -26,6 +26,7 @@ export interface Config {
   roll: boolean,
   undo: boolean,
   echo: boolean,
+  echoBanner: string[],
 
   //回应
   atNotSay: boolean,
@@ -62,8 +63,9 @@ export const Config = Schema.intersect([
   }).description('语录记录功能'),
   Schema.object({
     roll: Schema.boolean().default(true).description('开启roll随机数功能'),
-    undo: Schema.boolean().default(true).description('机器人撤回消息功能'),
-    echo: Schema.boolean().default(true).description('echo回声洞功能')
+    undo: Schema.boolean().default(true).description('机器人撤回消息功能(只测试了qq的onebot适配器)'),
+    echo: Schema.boolean().default(true).description('echo回声洞功能'),
+    echoBanner: Schema.array(String).role('table').description('echo屏蔽词，对文本生效'),
   }).description('指令小功能'),
   Schema.object({
     atNotSay: Schema.boolean().default(true).description('开启‘艾特我又不说话’功能'),
@@ -126,7 +128,7 @@ export function apply(ctx: Context, cfg: Config) {
   if (cfg.openSold) {
     ctx.command('卖掉了 [param]')
       .action(async ({session}, param) => {
-        console.log('ssssss')
+        //console.log('ssssss')
         if (utils.detectControl(controlJson, session.guildId, "sold"))
           await session.send(await utils.drawSold(ctx, await utils.getImageSrc(session, param)));
       })
@@ -147,15 +149,17 @@ export function apply(ctx: Context, cfg: Config) {
         if (utils.detectControl(controlJson, session.guildId, "echo")) {
           const elements = session.elements;
           try {
-            console.log(elements);
+            //console.log(elements);
             //第一个肯定是指令(其实可能是at)
             while (elements[0].type === 'at' || (elements[0].type === 'text' && !elements[0].attrs?.content.trim())) elements.shift();
             elements[0].attrs.content = elements[0].attrs?.content.trim().split(" ").slice(1).join(" ");
             //console.log(elements);
             //如果什么内容都没有
             if (elements.length == 1 && !elements[0].attrs.content?.length) {
+              if (cfg.echoBanner?.some(banText => session.quote?.content?.includes(banText)))return '包含屏蔽词，打断echo';
               return session.quote?.elements;
             }
+            if (cfg.echoBanner?.some(banText => session.content?.includes(banText)))return '包含屏蔽词，打断echo';
             return elements;
           } catch (e) {
             return params;
@@ -236,16 +240,16 @@ export function apply(ctx: Context, cfg: Config) {
       .action(async ({session}, urls) => {
         if (utils.detectControl(controlJson, session.guildId, "originImg")) {
           let [xUrls, xIndex] = await Promise.all([
-            utils.getXUrl(session.quote.content),
+            utils.getXUrl(session?.quote?.content),
             utils.getXNum(session)
           ]);
           xIndex = xIndex.length ? xIndex : xUrls.map((_, i) => i);
-          console.log(`xIndex:${xIndex}`);
-          console.log(`xUrls:${xUrls}`);
+          //console.log(`xIndex:${xIndex}`);
+          //console.log(`xUrls:${xUrls}`);
           const filteredUrls = xIndex.filter(i => i >= 0 && i < xUrls.length).map(i => xUrls[i]);
-          console.log(filteredUrls)
+          //console.log(filteredUrls)
           const imageUrls = await utils.getXImage(cfg.originImgRSSUrl, filteredUrls);
-          console.log(imageUrls);
+          //console.log(imageUrls);
           await utils.sendImages(session, cfg, imageUrls);
         }
       })
