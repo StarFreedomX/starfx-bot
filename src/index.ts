@@ -88,10 +88,8 @@ export const Config = Schema.intersect([
   }).description('特定回应功能'),
   Schema.object({
     sendLocalImage: Schema.dict(Schema.object({
-      white: Schema.string(),
-      black: Schema.string(),
       imgPath: Schema.string(),
-    })).role('table').description("特定指令发送本地图片功能，其中键是指令名称，black/white是黑白名单(直接输入群号用半角逗号分隔，两个都不输入默认全量)，imgPath是图片文件的绝对路径"),
+    })).role('table').description("特定指令发送本地图片功能，其中键是指令名称，imgPath是图片文件的绝对路径"),
   }),
   Schema.object({
     openRepeat: Schema.boolean().default(true).description('开启复读功能'),
