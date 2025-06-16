@@ -1,4 +1,4 @@
-import {Context, h, Random, Session} from "koishi";
+import {Context, h, Random, Session, Universal} from "koishi";
 import fs from "fs";
 import path from "node:path";
 import sharp from "sharp";
@@ -676,6 +676,40 @@ async function getXImageBase64(url: string, cfg: Config) {
   console.log('success')
   return dataUrl;
 }
+
+
+async function getMemberInfo(ctx: Context, member: Universal.GuildMember, gid: string, userId: string, id: string, platform: string) {
+  let name = member?.nick || member?.user?.nick || member?.user?.name;
+  const avatar = member?.avatar || member?.user?.avatar;
+  if (!name && ctx.database) {
+    const user = await ctx.database.getUser(platform, id)
+    if (user?.name) {
+      name = user.name;
+    }
+  }
+  name ||= id;
+  return [name, avatar]
+}
+
+export function safeQuote(str: string, useQuote: boolean): string {
+  // 如果以双引号开头或结尾，就尝试去除它们（即使只有一侧也处理）
+  let unquoted = str.trim();
+  if (unquoted.startsWith('"')) {
+    unquoted = unquoted.slice(1);
+  }
+  if (unquoted.endsWith('"')) {
+    unquoted = unquoted.slice(0, -1);
+  }
+
+  if (useQuote) {
+    return `"${unquoted}"`;
+  } else {
+    return unquoted;
+  }
+}
+
+
+
 export async function test(url: string) {
 
 }

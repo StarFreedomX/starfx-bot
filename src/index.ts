@@ -1,6 +1,7 @@
 import {Context, h, Logger, Random, Schema} from 'koishi'
 import * as fs from 'fs'
 import * as utils from './utils'
+import {safeQuote} from "./utils";
 
 export const name = 'starfx-bot'
 export let baseDir: string;
@@ -10,6 +11,13 @@ export const starfxLogger: Logger = new Logger('starfx-bot')
 //复读共享上下文
 export const repeatContextMap = new Map<string, [string, number]>();
 
+interface sendLocalImageConfigItem{
+  imgPath: string,
+}
+
+interface sendLocalImageConfigDict{
+  [key: string]: sendLocalImageConfigItem,
+}
 
 export interface Config {
   //绘图
@@ -35,6 +43,7 @@ export interface Config {
   atNotSayOtherProperty: number,
   iLoveYou: boolean,
   replyBot: string,
+  sendLocalImage: sendLocalImageConfigDict,
 
   //复读
   openRepeat: boolean,
@@ -77,6 +86,13 @@ export const Config = Schema.intersect([
     iLoveYou: Schema.boolean().default(true).description('开启‘我喜欢你’功能'),
     replyBot: Schema.union(['关闭', '无需at', '必须at']).default('无需at').description('回复‘我才不是机器人！’功能'),
   }).description('特定回应功能'),
+  Schema.object({
+    sendLocalImage: Schema.dict(Schema.object({
+      white: Schema.string(),
+      black: Schema.string(),
+      imgPath: Schema.string(),
+    })).role('table').description("特定指令发送本地图片功能，其中键是指令名称，black/white是黑白名单(直接输入群号用半角逗号分隔，两个都不输入默认全量)，imgPath是图片文件的绝对路径"),
+  }),
   Schema.object({
     openRepeat: Schema.boolean().default(true).description('开启复读功能'),
     minRepeatTimes: Schema.number().default(2).description('最少重复次数'),
@@ -176,14 +192,11 @@ export function apply(ctx: Context, cfg: Config) {
       .option('band', '-b <band: string>')
       .action(async ({session, options}, param) => {
         if (utils.detectControl(controlJson, session.guildId, "bdbd")) {
-          const p = session.send('图片处理中请稍等...')
-          console.log(param?.slice(0, 1000))
           const drawConfig = await utils.handleBanGDreamConfig(options);
           const imgSrc = await utils.getImageSrc(session, param);
           if (!imgSrc?.length) return '输入无效';
           const imageBase64: string = await utils.drawBanGDream(imgSrc, drawConfig);
-          if (!imageBase64?.length) return '输入无效...';
-          await p;
+          if (!imageBase64?.length) return '输入无效';
           await session.send(h.image(imageBase64))
         }
       })
@@ -217,6 +230,17 @@ export function apply(ctx: Context, cfg: Config) {
         }
       });
   }
+
+  for(const key in cfg.sendLocalImage){
+    ctx.command(key)
+      .action(async ({session}) => {
+        if (utils.detectControl(controlJson, session.guildId, "sendLocalImage") &&
+          utils.detectControl(controlJson, session.guildId, key)
+        )
+        return h.image(utils.safeQuote(cfg.sendLocalImage[key].imgPath, false))
+    })
+  }
+
 
   if (cfg.saveArchive) {
     ctx.command('入典')
