@@ -1,7 +1,7 @@
 import {Context, h, Logger, Random, Schema} from 'koishi'
 import * as fs from 'fs'
 import * as utils from './utils'
-import {safeQuote} from "./utils";
+import {} from '@koishijs/plugin-help'
 
 export const name = 'starfx-bot'
 export let baseDir: string;
@@ -12,6 +12,7 @@ export const starfxLogger: Logger = new Logger('starfx-bot')
 export const repeatContextMap = new Map<string, [string, number]>();
 
 interface sendLocalImageConfigItem{
+  hiddenInHelp: boolean,
   imgPath: string,
 }
 
@@ -88,6 +89,7 @@ export const Config = Schema.intersect([
   }).description('特定回应功能'),
   Schema.object({
     sendLocalImage: Schema.dict(Schema.object({
+      hiddenInHelp: Schema.boolean(),
       imgPath: Schema.string(),
     })).role('table').description("特定指令发送本地图片功能，其中键是指令名称，imgPath是图片文件的绝对路径"),
   }),
@@ -230,7 +232,7 @@ export function apply(ctx: Context, cfg: Config) {
   }
 
   for(const key in cfg.sendLocalImage){
-    ctx.command(key)
+    ctx.command(key,{ hidden: cfg.sendLocalImage[key].hiddenInHelp })
       .action(async ({session}) => {
         if (utils.detectControl(controlJson, session.guildId, "sendLocalImage") &&
           utils.detectControl(controlJson, session.guildId, key)
