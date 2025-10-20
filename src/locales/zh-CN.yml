@@ -7,6 +7,31 @@ commands:
       noodles: '扔出了{num}个{noodles}面的骰子，点数如下:{points}'
       possibility: '{param}是{possibility}%'
       choose: '当然是{option}啦!'
+  room-number:
+    messages:
+      roomNumber: '当前的房间号是: {room}'
+      changeRoom: '已将当前房间号 {oldRoom} 修改为 {newRoom}'
+      newRoom: '已添加房间号: {room}'
+      noRoom: '当前没有保存的房间'
+      delRoom: '已删除房间: {room}'
+      invalid: '无效输入'
+  forward:
+    messages:
+      delete: '已删除转发群聊: {gid}'
+      noTarget: '未配置转发群组'
+      success: '已转发消息到: {target}'
+      noMessage: '请引用要转发的消息'
+      setOK: '已配置转发: {target}'
+      forwardContent: '[转发消息]<br/>
+      {content}'
+  waiting-play:
+    messages:
+      addReady: '已添加，当前待机{num}人: <br/>{list}'
+      delReady: '已删除，当前待机{num}人: <br/>{list}'
+      delFailed: '未删除，当前待机{num}人: <br/>{list}'
+      clearReady: '待机列表已清空'
+      listReady: '当前待机{num}人: <br/>{list}'
+      invalid: '输入无效'
 middleware:
   messages:
     atNotReply: '艾特我又不说话'

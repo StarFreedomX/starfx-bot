@@ -59,6 +59,7 @@ StarFreedomX机器人的小功能，自用
 | `echo`           | echo功能                                |
 | `originImg`      | rss获取推特原图                             |
 | `sendLocalImage` | 自定义指令发送图片功能(自定义指令也可配置，键为自定义的指令名称)     |
+| `forward`        | 消息转发功能                                |
 
 ---
 

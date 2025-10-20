@@ -714,6 +714,62 @@ export async function test(url: string) {
 
 }
 
+
+export function writeMap(map: Map<any,any>, dest: string){
+  const dir = path.dirname(dest);
+  // 自动创建目录（如果不存在）
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  fs.writeFileSync(dest, JSON.stringify([...map], null, 2), 'utf-8');
+}
+
+export function readMap(url: string): Map<any,any> {
+
+  // 自动创建目录（如果不存在）
+  if (!fs.existsSync(url)) {
+    const map = new Map<any,any>()
+    writeMap(map, url);
+  }
+  const raw = fs.readFileSync(url, 'utf-8');
+  const mapArray = JSON.parse(raw);
+  return new Map(mapArray);
+}
+
+export function ready(session: Session, cfg:Config, param: string, readyMap: Map<string, string[]>) {
+  const nowReadyMap = cfg.saveReadyAsFile ? readMap(cfg.saveReadyAsFile) : readyMap;
+  let strArr: string[] = nowReadyMap.get(session.gid) ?? [];
+  let returnMessage = session.text('.invalid')
+  if (param === '+' || param === '+1'){
+    strArr.push(session.username)
+    returnMessage = session.text('.addReady', {
+      num: strArr.length,
+      list: strArr.join('\n'),
+    })
+  }else if(param === '-' || param === '-1'){
+    const newStrArr = strArr.filter(item => item !== session.username)
+    returnMessage = newStrArr.length !== strArr.length ? session.text('.delReady', {
+      num: newStrArr.length,
+      list: newStrArr.join('\n'),
+    }) : session.text('.delFailed',{
+      num: newStrArr.length,
+      list: newStrArr.join('\n'),
+    })
+    strArr = newStrArr;
+  }else if(param === '0'){
+    strArr.length = 0;
+    returnMessage = session.text('.clearReady');
+  }else if(param === '' || !param){
+    returnMessage = session.text('.listReady', {
+      num: strArr.length,
+      list: strArr.join('\n')
+    });
+  }
+  nowReadyMap.set(session.gid, strArr);
+  writeMap(nowReadyMap,cfg.saveReadyAsFile)
+  return returnMessage;
+}
+
 /*export function saveArchive(quoteElements: h[], gid: string, session: Session) {
 
 }*/

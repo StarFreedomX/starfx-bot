@@ -2,12 +2,14 @@ import {Context, h, Logger, Random, Schema} from 'koishi'
 import * as fs from 'fs'
 import * as utils from './utils'
 import {} from '@koishijs/plugin-help'
+import path from "node:path";
 
 export const name = 'starfx-bot'
 export let baseDir: string;
 export let assetsDir: string;
 export const starfxLogger: Logger = new Logger('starfx-bot')
 
+export const inject = ['database']
 //复读共享上下文
 export const repeatContextMap = new Map<string, [string, number]>();
 
@@ -36,6 +38,11 @@ export interface Config {
   undo: boolean,
   echo: boolean,
   echoBanner: string[],
+  ready: boolean,
+  saveReadyAsFile: string,
+  roomNumber: boolean,
+  saveRoomAsFile: string,
+  forward: boolean,
 
   //回应
   atNotSay: boolean,
@@ -55,6 +62,7 @@ export interface Config {
   originImg: boolean,
   originImgRSSUrl: string,
   proxyUrl: string,
+  filePathToBase64: boolean,
 
   //功能控制
   featureControl: string,
@@ -76,6 +84,11 @@ export const Config = Schema.intersect([
     undo: Schema.boolean().default(true).description('机器人撤回消息功能(只测试了qq的onebot适配器)'),
     echo: Schema.boolean().default(true).description('echo回声洞功能'),
     echoBanner: Schema.array(String).role('table').description('echo屏蔽词，对文本生效'),
+    ready: Schema.boolean().default(false).description('待机人数记录功能'),
+    saveReadyAsFile: Schema.string().description('写入待机人数的本地地址，留空则不写入'),
+    roomNumber: Schema.boolean().default(false).description('主跑房间号记录功能'),
+    saveRoomAsFile: Schema.string().description('写入房间号的本地地址，留空则不写入'),
+    forward: Schema.boolean().default(true).description('消息转发功能'),
   }).description('指令小功能'),
   Schema.object({
     atNotSay: Schema.boolean().default(true).description('开启‘艾特我又不说话’功能'),
@@ -101,7 +114,7 @@ export const Config = Schema.intersect([
   }).description('复读功能'),
   Schema.object({
     originImg: Schema.boolean().default(false).description('根据链接获取原图开关'),
-
+    //filePathToBase64: Schema.boolean().default(false).description('在消息发送前检查是否有file://,如果有那么转换为base64再发送'),
   }).description('自用功能'),
   Schema.union([
     Schema.object({
@@ -205,7 +218,9 @@ export function apply(ctx: Context, cfg: Config) {
   if (cfg.record) {
     ctx.command('投稿 [param]')
       .action(async ({session}, param) => {
-        if (utils.detectControl(controlJson, session.guildId, "record")) {
+        if (utils.detectControl(controlJson, session.guildId, "record") &&
+          utils.detectControl(controlJson, session.guildId, "record-push")
+        ) {
           const imageSrc = await utils.getImageSrc(session, param,
             {
               img: true,
@@ -222,13 +237,16 @@ export function apply(ctx: Context, cfg: Config) {
       })
     ctx.command('语录 [tag:string]')
       .action(async ({session}, tag) => {
-        if (utils.detectControl(controlJson, session.guildId, "record")) {
+        if (utils.detectControl(controlJson, session.guildId, "record") &&
+          utils.detectControl(controlJson, session.guildId, "record-get")
+        ) {
           const filepath = await utils.getRecord(cfg, session.gid.replace(':', '_'), tag);
           starfxLogger.info(`send record: ${filepath}`);
           if (!filepath) return '暂无语录呢';
           await session.send(h.image(filepath));
         }
       });
+
   }
 
   for(const key in cfg.sendLocalImage){
@@ -241,6 +259,39 @@ export function apply(ctx: Context, cfg: Config) {
     })
   }
 
+  if (cfg.roomNumber){
+    const roomNumMap = new Map<string,string>();
+    ctx.command('room-number [param: string]')
+      .action(async ({session},param) => {
+        const nowRoomNumMap: Map<string, string> = cfg.saveRoomAsFile ? utils.readMap(cfg.saveRoomAsFile) : roomNumMap
+        const room = nowRoomNumMap.get(session.gid)
+        if (!param){
+          return room ? session.text('.roomNumber',{
+            room: room
+          }) : session.text('.noRoom');
+        }else{
+          let returnMessage = session.text('.invalid')
+          if (/^[0-9]{5,6}$/.test(param)){
+            const had = nowRoomNumMap.get(session.gid)
+            nowRoomNumMap.set(session.gid, param);
+            returnMessage = had ? session.text('.changeRoom',{oldRoom: room, newRoom: param}) : session.text('.newRoom', {room: param});
+          }else if (param == '0'){
+            nowRoomNumMap.delete(session.gid);
+            returnMessage = session.text('.delRoom', {room: room});
+          }
+          utils.writeMap(nowRoomNumMap,cfg.saveRoomAsFile)
+          return returnMessage;
+        }
+      })
+  }
+
+  if (cfg.ready){
+    const readyMap = new Map<string, string[]>();
+    ctx.command('waiting-play [param:text]', {strictOptions: true})
+      .action(async ({session},param) => {
+        return utils.ready(session, cfg, param, readyMap);
+    })
+  }
 
   if (cfg.saveArchive) {
     ctx.command('入典')
@@ -255,6 +306,36 @@ export function apply(ctx: Context, cfg: Config) {
       .action(async ({session}) => {
         if (utils.detectControl(controlJson, session.guildId, "undo"))
           await utils.undo(cfg, session);
+      })
+  }
+
+  if (cfg.forward){
+    ctx.command('forward')
+      .option('group', '-g <group:string>')
+      .option('platform', '-p <platform:string>')
+      .action(async ({session, options}) => {
+        if (utils.detectControl(controlJson, session.guildId, "forward")){
+          const mapPath = path.join(assetsDir, 'forward.json');
+          const groupMap = utils.readMap(mapPath);
+          if (options.group){
+            if (['0','clear','del'].includes(options.group)){
+              const gid = groupMap.get(session.gid);
+              groupMap.delete(session.gid);
+              utils.writeMap(groupMap, mapPath);
+              return session.text('.delete', { gid: gid})
+            }
+            const target = `${options.platform || session.platform}:${options.group}`
+            groupMap.set(session.gid, target);
+            utils.writeMap(groupMap, mapPath);
+            if (!session.quote?.content?.length) return session.text('.setOK', {target: target})
+          }
+          const target = groupMap.get(session.gid);
+          if (!target) return session.text('.noTarget');
+          if (!session.quote?.content?.length) return session.text('.noMessage');
+          const forwardContent = session.text('.forwardContent', {content: session.quote.content});
+          await ctx.broadcast([target],forwardContent);
+          return session.text('.success', {target: target});
+        }
       })
   }
 
@@ -310,7 +391,7 @@ export function apply(ctx: Context, cfg: Config) {
   if (process.env.NODE_ENV === 'development') {
     ctx.command('test')
       .action(async ({session}) => {
-
+        console.log(session.gid)
       })
   }
 
