@@ -4,7 +4,7 @@
   "contributors": [
     "StarFreedomX <starfreedomx@outlook.com>"
   ],
-  "version": "0.16.2",
+  "version": "0.16.4",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -41,6 +41,7 @@
     "http-proxy-agent": "^7.0.2",
     "https-proxy-agent": "^7.0.6",
     "jimp": "^1.6.0",
+    "mime-types": "^3.0.1",
     "rss-parser": "^3.13.0",
     "sharp": "^0.34.1"
   }
