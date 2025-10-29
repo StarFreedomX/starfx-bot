@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "node:path";
 import sharp from "sharp";
 import {Jimp} from "jimp";
-import {assetsDir, baseDir, Config, starfxLogger} from "./index";
+import {assetsDir, baseDir, Config, recordLink, starfxLogger} from "./index";
 import Parser from 'rss-parser';
 import * as cheerio from 'cheerio';
 import {HttpProxyAgent} from "http-proxy-agent";
@@ -46,7 +46,11 @@ export async function addRecord(ctx: Context, gid: string, avatarUrl: string): P
  */
 export async function getRecord(cfg: Config, gid: string, tag: string): Promise<string | null> {
   const tagConfigPath = path.join(assetsDir, "tagConfig", `${gid}.json`);
-  const recordDir = path.join(assetsDir, "record", gid);
+  const links = cfg.recordLink;
+  links[gid] = {linkGroup:gid,linkWeight:100};
+  const selectGid = getRandomLinkGroup(links).replaceAll(':', '_')
+  // console.log(selectGid)
+  const recordDir = path.join(assetsDir, "record", selectGid);
 
   if (!fs.existsSync(recordDir)) return null;
 
@@ -78,7 +82,18 @@ export async function getRecord(cfg: Config, gid: string, tag: string): Promise<
 
   return null;
 }
-
+function getRandomLinkGroup(record: recordLink): string {
+  const entries = Object.values(record);
+  const totalWeight = entries.reduce((sum, item) => sum + item.linkWeight, 0);
+  let r = Math.random() * totalWeight;
+  for (const item of entries) {
+    r -= item.linkWeight;
+    if (r <= 0) {
+      return item.linkGroup;
+    }
+  }
+  return entries[entries.length - 1].linkGroup;
+}
 
 
 /**
