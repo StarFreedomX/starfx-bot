@@ -445,6 +445,7 @@ export function apply(ctx: Context, cfg: Config) {
   if (process.env.NODE_ENV === 'development') {
     ctx.command('test')
       .action(async ({session}) => {
+        // console.log(session.quote)
       })
   }
 

@@ -45,13 +45,13 @@ export async function addRecord(ctx: Context, gid: string, avatarUrl: string): P
  * @return 图片的文件路径
  */
 export async function getRecord(cfg: Config, gid: string, tag: string): Promise<string | null> {
-  const tagConfigPath = path.join(assetsDir, "tagConfig", `${gid}.json`);
-  const links = cfg.recordLink;
+
+  const links = structuredClone(cfg.recordLink);
   links[gid] = {linkGroup:gid,linkWeight:100};
   const selectGid = getRandomLinkGroup(links).replaceAll(':', '_')
   // console.log(selectGid)
   const recordDir = path.join(assetsDir, "record", selectGid);
-
+  const tagConfigPath = path.join(assetsDir, "tagConfig", `${selectGid}.json`);
   if (!fs.existsSync(recordDir)) return null;
 
   const files = fs.readdirSync(recordDir).filter(file => /\.(png|jpe?g|webp|gif)$/i.test(file));
@@ -83,6 +83,7 @@ export async function getRecord(cfg: Config, gid: string, tag: string): Promise<
   return null;
 }
 function getRandomLinkGroup(record: recordLink): string {
+  // starfxLogger.info(record)
   const entries = Object.values(record);
   const totalWeight = entries.reduce((sum, item) => sum + item.linkWeight, 0);
   let r = Math.random() * totalWeight;
