@@ -380,12 +380,14 @@ export async function getImageFromUrl(ctx: Context, url: string) {
  * @param elements 当前消息elements
  */
 export async function atNotSayReply(cfg: Config, session: Session, elements: h[]) {
+  const trimElements = elements.filter(e => !(e.type === 'text' && /^\s*$/.test(e.attrs.content)))
+  //console.log(trimElements);
   // 处理仅包含at的情况
   if ((cfg.atNotSay || cfg.atNotSayOther) &&
-    elements.length === 1 &&
-    elements[0].type === 'at') {
+    trimElements.length === 1 &&
+    trimElements[0].type === 'at') {
 
-    const isAtSelf = elements[0].attrs.id === session.selfId;
+    const isAtSelf = trimElements[0].attrs.id === session.selfId;
 
     if (isAtSelf && cfg.atNotSay && Random.bool(cfg.atNotSayProperty)) {
       await session.send(session.text('middleware.messages.atNotReply'));

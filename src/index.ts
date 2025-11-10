@@ -442,6 +442,7 @@ export function apply(ctx: Context, cfg: Config) {
           //times置为-1防止重复复读
           ctxArr[1] = -1;
           await session.send(content);//复读
+          //console.log(`"${content}"`);
         }
       }
     }
@@ -458,8 +459,11 @@ export function apply(ctx: Context, cfg: Config) {
   if (process.env.NODE_ENV === 'development') {
     ctx.command('test')
       .action(async ({session}) => {
-        // console.log(session.quote)
+        await session.send('               d   d                ')
       })
+    ctx.middleware(async (session, next) => {
+      return next();
+    });
   }
 
   function initAssets() {
