@@ -186,24 +186,37 @@ export function apply(ctx: Context, cfg: Config) {
 
   if (cfg.echo) {
     ctx.command('echo <params>')
-      .action(async ({session}, params) => {
+      .option('time', '-t <time: number> 指定时间(min)')
+      .action(async ({session, options}, params) => {
         if (utils.detectControl(controlJson, session.guildId, "echo")) {
           const elements = session.elements;
-          try {
-            //console.log(elements);
-            //第一个肯定是指令(其实可能是at)
-            while (elements[0].type === 'at' || (elements[0].type === 'text' && !elements[0].attrs?.content.trim())) elements.shift();
-            elements[0].attrs.content = elements[0].attrs?.content.trim().split(" ").slice(1).join(" ");
-            //console.log(elements);
-            //如果什么内容都没有
-            if (elements.length == 1 && !elements[0].attrs.content?.length) {
-              if (cfg.echoBanner?.some(banText => session.quote?.content?.includes(banText)))return '包含屏蔽词，打断echo';
-              return session.quote?.elements;
+          // console.log(elements)
+          const getEchoMessage = () => {
+            try {
+              //console.log(elements);
+              //第一个肯定是指令(其实可能是at)
+              while (elements[0].type === 'at' || (elements[0].type === 'text' && !elements[0].attrs?.content.trim())) elements.shift();
+              elements[0].attrs.content = elements[0].attrs?.content.trim().split(/\s/).slice(1).join(" ");
+              elements.forEach(ele => { ele.attrs.content = ele.attrs?.content.trim().split(/\s/).filter((v:string,i:number,a:string[])=>v!=="-t"&&a[i-1]!=="-t").join(" "); })
+              //console.log(elements);
+              //如果什么内容都没有
+              if (elements.length == 1 && !elements[0].attrs.content?.length) {
+                if (cfg.echoBanner?.some(banText => session.quote?.content?.includes(banText))) return '包含屏蔽词，打断echo';
+                return session.quote?.elements;
+              }
+              if (cfg.echoBanner?.some(banText => session.content?.includes(banText))) return '包含屏蔽词，打断echo';
+              return elements;
+            } catch (e) {
+              return params;
             }
-            if (cfg.echoBanner?.some(banText => session.content?.includes(banText)))return '包含屏蔽词，打断echo';
-            return elements;
-          } catch (e) {
-            return params;
+          }
+          const echoMessages = getEchoMessage();
+          if (!options?.time && options.time > 0){
+            return echoMessages;
+          } else {
+            setTimeout(async()=>{
+              await ctx.broadcast([session.gid], echoMessages)
+            }, options.time * 60 * 1000);
           }
         }
       })
