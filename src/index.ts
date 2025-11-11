@@ -3,6 +3,7 @@ import * as fs from 'fs'
 import * as utils from './utils'
 import path from "node:path";
 import mime from "mime-types";
+import pkg from '../package.json';
 
 export const name = 'starfx-bot'
 export let baseDir: string;
@@ -466,20 +467,39 @@ export function apply(ctx: Context, cfg: Config) {
     });
   }
 
+
+
   function initAssets() {
-    const fromUrl = `${__dirname}/../assets`;
-    assetsDir = `${ctx.baseDir}/data/starfx-bot/assets`;
-    if (!fs.existsSync(fromUrl)) return;
-    if (!fs.readdirSync(fromUrl)?.length) return;
-    if (!fs.existsSync(assetsDir)) {
-      fs.mkdirSync(assetsDir, {recursive: true});
+    const defaultAssetsDir = path.join(__dirname, '../assets');
+
+    // 直接给全局变量赋值
+    assetsDir = path.join(ctx.baseDir, 'data/starfx-bot/assets');
+
+    if (!fs.existsSync(assetsDir)) fs.mkdirSync(assetsDir, { recursive: true });
+
+    const versionFile = path.join(assetsDir, 'plugin_version.json');
+
+    let localVersion = '0';
+    if (fs.existsSync(versionFile)) {
+      try {
+        localVersion = JSON.parse(fs.readFileSync(versionFile, 'utf-8')).version || '0';
+      } catch {}
     }
 
-    fs.cpSync(fromUrl, assetsDir, {recursive: true, force: true});
-    if (process.env.NODE_ENV !== "development") {
-      fs.rmSync(fromUrl, {recursive: true});
-    }
+    const pluginVersion = pkg.version;
 
+    if (pluginVersion > localVersion) {
+      try {
+        if (fs.existsSync(defaultAssetsDir)) {
+          fs.cpSync(defaultAssetsDir, assetsDir, { recursive: true, force: true });
+        }
+        fs.writeFileSync(versionFile, JSON.stringify({ version: pluginVersion }));
+      } catch (err) {
+        console.error('initAssets copy failed:', err);
+      }
+    }
   }
+
+
 }
 
