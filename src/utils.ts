@@ -5,10 +5,25 @@ import sharp from "sharp";
 import {Jimp} from "jimp";
 import {assetsDir, baseDir, Config, recordLink, starfxLogger} from "./index";
 import Parser from 'rss-parser';
+import 'chartjs-adapter-dayjs-3';
 import * as cheerio from 'cheerio';
 import {HttpProxyAgent} from "http-proxy-agent";
 import {HttpsProxyAgent} from "https-proxy-agent";
 import axios from "axios";
+import {
+  Chart,
+  LineController,
+  LineElement,
+  PointElement,
+  LinearScale,
+  TimeScale,
+  ChartItem,
+  registerables,
+} from 'chart.js';
+import { Canvas } from 'skia-canvas';
+Chart.register(
+  ...registerables
+);
 
 
 //功能控制
@@ -509,6 +524,69 @@ export async function drawBanGDream(avatar: string, inputOptions?: {
   return `data:image/png;base64,${(await image.getBuffer("image/jpeg")).toString("base64")}`;
 }
 
+export async function intervalGetExchangeRate(ctx: Context, cfg: Config, session: Session, searchString: string, exchangeRatePath: string) {
+  //TODO
+}
+
+export async function getExchangeRate(ctx: Context, cfg: Config, session: Session, searchString: string) {
+  try {
+    const apiKey = await getMvpAPIKey();
+    const guids = await getExchangeGuids(searchString, apiKey);
+
+    // guids 如果全是空字符串，就说明 symbol 无效
+    if (!guids.length || guids.every(g => !g)) {
+      throw new Error("Invalid symbols");
+    }
+
+    const result: { name: string; nowPrice: number; oneMonthChart: h }[] = [];
+
+    for (const guid of guids) {
+      if (!guid) throw new Error("GUID not found");
+
+      const nowPriceArr = await getQuotes(guid, apiKey);
+      const monthPriceArr = await getMonthMSNClosePrices(guid, apiKey);
+      const nowPrice = nowPriceArr?.[0];
+      const oneMonthPrice = monthPriceArr?.[0];
+
+      if (!nowPrice || !oneMonthPrice) {
+        throw new Error("Failed to fetch price");
+      }
+
+      const chartBuffer = await drawOneMonthChartSkia(oneMonthPrice.prices, oneMonthPrice.timeStamps);
+      const imgSrc = "data:image/png;base64," + chartBuffer.toString("base64");
+
+      result.push({
+        name: nowPrice.symbolName,
+        nowPrice: nowPrice.price,
+        oneMonthChart: h.image(imgSrc),
+      });
+    }
+
+    // 全部成功才发送
+    for (const item of result) {
+      await session.send([
+        h.text(new Date().toLocaleString()),
+        h.text(`\n${item.name}\n当前价格: `),
+        h.text(`${item.nowPrice}\n近30天价格走势: `),
+        item.oneMonthChart
+      ]);
+    }
+
+  } catch (err) {
+    // console.error("查询异常：", err);
+    // 统一格式化错误文本
+    const message =
+      err instanceof Error
+        ? err.message
+        : typeof err === "string"
+          ? err
+          : JSON.stringify(err);
+
+    await session.send(`查询失败：${message}`);
+  }
+}
+
+
 export function parseJsonControl(text: string): FeatureControl | null {
   try {
     return JSON.parse(text);
@@ -615,8 +693,6 @@ export async function undo(cfg: Config, session: Session) {
   }
 }
 
-
-
 export async function getXUrl(urls: string){
   const regex = /https:\/\/x\.com\/([^\/]+)\/status\/(\d+)/g;
   let match;
@@ -695,20 +771,6 @@ async function getXImageBase64(url: string, cfg: Config) {
   return dataUrl;
 }
 
-
-async function getMemberInfo(ctx: Context, member: Universal.GuildMember, gid: string, userId: string, id: string, platform: string) {
-  let name = member?.nick || member?.user?.nick || member?.user?.name;
-  const avatar = member?.avatar || member?.user?.avatar;
-  if (!name && ctx.database) {
-    const user = await ctx.database.getUser(platform, id)
-    if (user?.name) {
-      name = user.name;
-    }
-  }
-  name ||= id;
-  return [name, avatar]
-}
-
 export function safeQuote(str: string, useQuote: boolean): string {
   // 如果以双引号开头或结尾，就尝试去除它们（即使只有一侧也处理）
   let unquoted = str.trim();
@@ -726,12 +788,9 @@ export function safeQuote(str: string, useQuote: boolean): string {
   }
 }
 
-
-
 export async function test(url: string) {
 
 }
-
 
 export function writeMap(map: Map<any,any>, dest: string){
   const dir = path.dirname(dest);
@@ -788,6 +847,227 @@ export function ready(session: Session, cfg:Config, param: string, readyMap: Map
   return returnMessage;
 }
 
-/*export function saveArchive(quoteElements: h[], gid: string, session: Session) {
+async function updateMvpAPIKey(): Promise<string | null> {
+  try {
+    // 1. 获取 MSN 货币转换器页面 HTML
+    const htmlResp = await fetch("https://www.msn.com/zh-cn/money/tools/currencyconverter");
+    if (!htmlResp.ok) throw new Error(`Failed to fetch page: ${htmlResp.status}`);
+    const html = await htmlResp.text();
 
-}*/
+    // 2. 使用 cheerio 解析 HTML
+    const $ = cheerio.load(html);
+    const head = $("head");
+    const clientSettingsRaw = head.attr("data-client-settings");
+    if (!clientSettingsRaw) throw new Error("未找到 data-client-settings 属性");
+
+    // 3. 解析 JSON 获取版本号
+    const clientSettings = JSON.parse(clientSettingsRaw.replace(/&quot;/g, '"'));
+    const version = clientSettings?.bundleInfo?.v;
+    if (!version) throw new Error("未找到 bundleInfo.v");
+
+    // 4. 构造 targetScope 并 encodeURIComponent
+    const targetScope = encodeURIComponent(JSON.stringify({
+      audienceMode: "adult",
+      browser: { browserType: "edgeChromium", version: "142", ismobile: "false" },
+      deviceFormFactor: "desktop",
+      domain: "www.msn.com",
+      locale: { content: { language: "zh", market: "cn" }, display: { language: "zh", market: "cn" } },
+      os: "windows",
+      modes: { audienceMode: "adult" },
+      platform: "web",
+      pageType: "finance::financetools::financecurrencyconverter",
+      pageExperiments: ["prg-cmc-river"]
+    }));
+
+    const apiUrl = `https://assets.msn.com/resolver/api/resolve/v3/config/?expType=AppConfig&apptype=finance&v=${version}&targetScope=${targetScope}`;
+
+    // 5. 请求 API JSON
+    const apiResp = await fetch(apiUrl);
+    if (!apiResp.ok) throw new Error(`Failed to fetch config API: ${apiResp.status}`);
+    const json = await apiResp.json();
+
+    // 6. 取出 mvpAPIkey
+    const mvpAPIkey = json?.configs?.["shared/msn-ns/CommonAutoSuggest/default"]?.properties?.["mvpAPIkey"] ?? null;
+
+    return mvpAPIkey;
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
+let mvpAPIKey: string;
+
+async function getMvpAPIKey(): Promise<string | null> {
+  return mvpAPIKey ? mvpAPIKey : updateMvpAPIKey();
+}
+
+async function getExchangeGuids(symbols: string, apikey: string): Promise<string[]> {
+  try {
+    const url = `https://assets.msn.cn/service/Finance/IdMap?apikey=${apikey}&MStarIds=${encodeURIComponent(symbols)}`;
+
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`请求失败: ${resp.status}`);
+    const data: Array<{ mStarId: string; guid: string }> = await resp.json();
+
+    // 返回 guid 数组，保持输入顺序
+    const inputSymbols = symbols.split(",");
+    const guidMap = new Map(data.map(item => [item.mStarId, item.guid]));
+    return inputSymbols.map(sym => guidMap.get(sym) || "");
+  } catch (err) {
+    console.error(err);
+    return [];
+  }
+}
+
+/**
+ * 获取 MSN 汇率 Quotes
+ * @param ids guid 字符串，例如 "avdzk2,avyomw"
+ * @param apiKey MSN mvpAPIKey
+ * @returns 对应的 price + symbolName 数组
+ */
+async function getQuotes(ids: string, apiKey: string): Promise<{ price: number; symbolName: string }[]> {
+  try {
+    const url = `https://assets.msn.com/service/Finance/Quotes?apikey=${encodeURIComponent(apiKey)}&cm=zh-cn&it=edgeid&ids=${encodeURIComponent(ids)}&wrapodata=false`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`请求失败: ${resp.status}`);
+    const data: any = await resp.json();
+
+    // 数据可能是单个数组或二维数组，统一处理
+    let quotes: any[] = [];
+    if (Array.isArray(data)) {
+      if (Array.isArray(data[0])) {
+        quotes = data.flat();
+      } else {
+        quotes = data;
+      }
+    }
+
+    // 返回结构包含 price 和 symbolName（中文名）
+    const inputIds = ids.split(",");
+    const quoteMap = new Map(
+      quotes.map(q => [
+        q.instrumentId,
+        {
+          price: q.price,
+          symbolName: q.localizedAttributes?.["zh-cn"]?.symbolName || q.symbol,
+        },
+      ])
+    );
+
+    return inputIds.map(id => quoteMap.get(id) ?? { price: 0, symbolName: "" });
+  } catch (err) {
+    console.error(err);
+    return [];
+  }
+}
+
+interface PriceSeries {
+  prices: number[];
+  timeStamps: string[];
+}
+
+async function getMonthMSNClosePrices(ids: string, apiKey: string): Promise<PriceSeries[]> {
+  const url = `https://assets.msn.com/service/Finance/QuoteSummary?apikey=${apiKey}&ids=${ids}&intents=Charts,Exchanges&type=1M1H&wrapodata=false`;
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+
+  let data = await res.json();
+
+  // 如果是二层数组，展平一层
+  if (Array.isArray(data) && data.length && Array.isArray(data[0])) {
+    data = data.flat();
+  }
+
+  if (!Array.isArray(data)) {
+    throw new Error('Unexpected API response format');
+  }
+
+  // 提取 prices 和 timeStamps
+  return data.map((item: any) => {
+    const series = item.chart?.series;
+    return {
+      prices: series?.prices || [],
+      timeStamps: series?.timeStamps || [],
+    };
+  });
+}
+
+/**
+ * 绘制近一个月收盘价走势图
+ * @param prices 收盘价数组
+ * @param timeStamps ISO 时间戳数组
+ * @param width 图表宽度
+ * @param height 图表高度
+ * @returns buffer
+ */
+export async function drawOneMonthChartSkia(
+  prices: number[],
+  timeStamps: string[],
+  width = 1200,
+  height = 600
+): Promise<Buffer> {
+  if (!prices.length || !timeStamps.length || prices.length !== timeStamps.length) return;
+
+  // 转成 {time, price} 对象
+  const dataPoints = timeStamps.map((t, i) => ({ x: new Date(t), y: prices[i] }));
+
+  // 创建 skia-canvas
+  const canvas = new Canvas(width, height);
+
+  const whiteBackground = {
+    id: 'whiteBackground',
+    beforeDraw(chart: any) {
+      const { ctx, width, height } = chart;
+      ctx.save();
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
+    }
+  };
+
+  new Chart(canvas as unknown as ChartItem, {
+    type: 'line',
+    data: {
+      datasets: [{
+        label: '兑换汇率',
+        data: dataPoints,
+        showLine: true,        // ⭐ 不连线，只画点
+        pointRadius: 0,          // 小点
+        pointBorderWidth: 0,     // ⭐ 去掉外边框 → 变成实心点
+        borderWidth: 2,
+        borderColor: 'blue',
+        backgroundColor: 'rgba(0,0,255,0.1)',
+        tension: 0.2
+      }]
+    },
+    options: {
+      responsive: false,
+      scales: {
+        x: {
+          type: 'time',
+          time: {
+            parser: 'YYYY-MM-DD HH:mm:ss',
+            tooltipFormat: 'YYYY/MM/DD HH:mm',
+            displayFormats: {
+              hour: 'HH:mm',
+              day: 'MM-DD',
+            },
+            unit: 'day',
+          },
+          title: { display: true, text: '日期' },
+        },
+        y: {
+          title: { display: true, text: '价格' }
+        }
+      },
+      layout: {
+        padding: { top: 20, bottom: 20, left: 20, right: 40 }
+      }
+    },
+    plugins: [whiteBackground]
+  });
+
+  return await canvas.toBuffer('png');
+}

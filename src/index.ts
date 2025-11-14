@@ -10,7 +10,6 @@ export let baseDir: string;
 export let assetsDir: string;
 export const starfxLogger: Logger = new Logger('starfx-bot')
 
-export const inject = ['database']
 //复读共享上下文
 export const repeatContextMap = new Map<string, [string, number]>();
 
@@ -52,6 +51,8 @@ export interface Config {
   roomNumber: boolean,
   saveRoomAsFile: string,
   forward: boolean,
+  searchExchangeRate: boolean,
+  intervalGetExchangeRate: boolean,
 
   //回应
   atNotSay: boolean,
@@ -102,6 +103,8 @@ export const Config = Schema.intersect([
     roomNumber: Schema.boolean().default(false).description('主跑房间号记录功能'),
     saveRoomAsFile: Schema.string().description('写入房间号的本地地址，留空则不写入'),
     forward: Schema.boolean().default(true).description('消息转发功能'),
+    searchExchangeRate: Schema.boolean().default(false).description('查汇率功能'),
+    intervalGetExchangeRate: Schema.boolean().default(false).description('汇率定时推送功能').hidden(),
   }).description('指令小功能'),
   Schema.object({
     atNotSay: Schema.boolean().default(true).description('开启‘艾特我又不说话’功能'),
@@ -126,9 +129,9 @@ export const Config = Schema.intersect([
       .min(0).max(1).step(0.01).default(0.3).description('复读发生概率'),
   }).description('复读功能'),
   Schema.object({
-    originImg: Schema.boolean().default(false).description('根据链接获取原图开关'),
     filePathToBase64: Schema.boolean().default(false).description('在消息发送前检查是否有file://,如果有那么转换为base64再发送'),
-  }).description('自用功能'),
+    originImg: Schema.boolean().default(false).description('根据链接获取原图开关'),
+    }).description('自用功能'),
   Schema.union([
     Schema.object({
       originImg: Schema.const(true).required(),
@@ -137,6 +140,7 @@ export const Config = Schema.intersect([
     }),
     Schema.object({}),
   ]),
+
   Schema.object({
     featureControl: Schema.string().role('textarea', {rows: [15]}).default('{\n\n}')
       .description(`黑/白名单配置，语法为JSON格式(可以不缩进)，<br\>
@@ -383,6 +387,25 @@ export function apply(ctx: Context, cfg: Config) {
           const imageUrls = await utils.getXImage(cfg.originImgRSSUrl, filteredUrls);
           //console.log(imageUrls);
           await utils.sendImages(session, cfg, imageUrls);
+        }
+      })
+  }
+
+  if (cfg.searchExchangeRate){
+    ctx.command('查汇率 [exchangeParam:string]')
+      .action(async ({session}, exchangeParam) => {
+        if (utils.detectControl(controlJson, session.guildId, "exchangeRate")) {
+          return await utils.getExchangeRate(ctx,cfg,session,exchangeParam);
+        }
+      })
+  }
+
+  if (cfg.intervalGetExchangeRate){
+    ctx.command('开启汇率推送 [exchangeParam:string]')
+      .action(async ({session}, exchangeParam) => {
+        if (utils.detectControl(controlJson, session.guildId, "exchangeRate")) {
+          const exchangeRatePath = path.join(assetsDir, 'exchangeRate.json');
+          return await utils.intervalGetExchangeRate(ctx,cfg,session,exchangeParam,exchangeRatePath);
         }
       })
   }

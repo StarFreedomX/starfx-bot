@@ -4,7 +4,7 @@
   "contributors": [
     "StarFreedomX <starfreedomx@outlook.com>"
   ],
-  "version": "0.18.2",
+  "version": "0.19.0",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -26,7 +26,7 @@
   ],
   "koishi": {
     "description": {
-      "zh": "starfx的机器人小插件，自用"
+      "zh": "starfx的机器人小插件，目前支持: 明日方舟封印功能 闲鱼“卖掉了”功能 艾特我/他又不说话 我才不是机器人！ 我也喜欢你！ BanG Dream!边框绘制 群语录 roll 待机人数记录 房间号记录 推特查看原图 复读 echo 撤回 查汇率 黑白名单配置"
     },
     "service": {},
     "preview": true,
@@ -37,12 +37,17 @@
   },
   "dependencies": {
     "axios": "^1.9.0",
+    "chart.js": "^4.5.1",
+    "chartjs-adapter-dayjs-3": "^1.2.3",
     "cheerio": "^1.0.0",
+    "dayjs": "^1.11.19",
     "http-proxy-agent": "^7.0.2",
     "https-proxy-agent": "^7.0.6",
     "jimp": "^1.6.0",
+    "luxon": "^3.7.2",
     "mime-types": "^3.0.1",
     "rss-parser": "^3.13.0",
-    "sharp": "^0.34.1"
+    "sharp": "^0.34.1",
+    "skia-canvas": "^3.0.8"
   }
 }
