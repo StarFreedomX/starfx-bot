@@ -293,6 +293,7 @@ export function apply(ctx: Context, cfg: Config) {
   if (cfg.roomNumber){
     const roomNumMap = new Map<string,string>();
     ctx.command('room-number [param: string]')
+      .usage('记录房间号')
       .action(async ({session},param) => {
         const nowRoomNumMap: Map<string, string> = cfg.saveRoomAsFile ? utils.readMap(cfg.saveRoomAsFile) : roomNumMap
         const room = nowRoomNumMap.get(session.gid)
@@ -319,6 +320,7 @@ export function apply(ctx: Context, cfg: Config) {
   if (cfg.ready){
     const readyMap = new Map<string, string[]>();
     ctx.command('waiting-play [param:text]', {strictOptions: true})
+      .usage('待机')
       .action(async ({session},param) => {
         return utils.ready(session, cfg, param, readyMap);
     })
@@ -334,6 +336,7 @@ export function apply(ctx: Context, cfg: Config) {
   if (cfg.undo) {
     ctx.command('undo')
       .alias('撤回')
+      .usage('撤回消息')
       .action(async ({session}) => {
         if (utils.detectControl(controlJson, session.guildId, "undo"))
           await utils.undo(cfg, session);
@@ -344,6 +347,7 @@ export function apply(ctx: Context, cfg: Config) {
     ctx.command('forward')
       .option('group', '-g <group:string>')
       .option('platform', '-p <platform:string>')
+      .usage('转发消息')
       .action(async ({session, options}) => {
         if (utils.detectControl(controlJson, session.guildId, "forward")){
           const mapPath = path.join(assetsDir, 'forward.json');
@@ -373,6 +377,7 @@ export function apply(ctx: Context, cfg: Config) {
   if (cfg.originImg) {
     ctx.command('获取X原图 <urls>')
       .alias('推特原图')
+      .usage('获取推特原图')
       .action(async ({session}, urls) => {
         if (utils.detectControl(controlJson, session.guildId, "originImg")) {
           let [xUrls, xIndex] = await Promise.all([
@@ -392,10 +397,16 @@ export function apply(ctx: Context, cfg: Config) {
   }
 
   if (cfg.searchExchangeRate){
-    ctx.command('查汇率 [exchangeParam:string]')
-      .action(async ({session}, exchangeParam) => {
+    ctx.command('查汇率 <exchangeParam:text>')
+      .usage('查询当前汇率')
+      .example('查汇率 JPY : 查询日元兑换人民币的汇率(3位字母)')
+      .example('查汇率 JPYCNY : 查询日元兑换人民币的汇率(6位字母)')
+      .example('查汇率 -r avdzk2 : 查询日元兑换人民币的汇率(msn代码avdzk2)')
+      .example('查汇率 -r auvwoc : 查询黄金的价格(msn代码auvwoc, 很怪吧我也不知道为什么是这个)')
+      .option('raw', '-r <raw:string>')
+      .action(async ({session,options}, exchangeParam) => {
         if (utils.detectControl(controlJson, session.guildId, "exchangeRate")) {
-          return await utils.getExchangeRate(ctx,cfg,session,exchangeParam);
+          return await utils.getExchangeRate(ctx,cfg,session,exchangeParam,options?.raw);
         }
       })
   }

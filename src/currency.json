@@ -1,0 +1,557 @@
+[
+  {
+    "country": "阿尔及利亚",
+    "currencyCn": "阿尔及利亚第纳尔",
+    "code": "DZD"
+  },
+  {
+    "country": "阿富汗",
+    "currencyCn": "阿富汗尼",
+    "code": "AFN"
+  },
+  {
+    "country": "阿根廷",
+    "currencyCn": "阿根廷比索",
+    "code": "ARS"
+  },
+  {
+    "country": "阿联酋",
+    "currencyCn": "阿联酋迪拉姆",
+    "code": "AED"
+  },
+  {
+    "country": "阿曼",
+    "currencyCn": "阿曼里亚尔",
+    "code": "OMR"
+  },
+  {
+    "country": "阿塞拜疆",
+    "currencyCn": "马纳特",
+    "code": "AZN"
+  },
+  {
+    "country": "埃及",
+    "currencyCn": "埃及镑",
+    "code": "EGP"
+  },
+  {
+    "country": "澳大利亚",
+    "currencyCn": "澳大利亚元",
+    "code": "AUD"
+  },
+  {
+    "country": "巴布亚新几内亚",
+    "currencyCn": "基那",
+    "code": "PGK"
+  },
+  {
+    "country": "巴基斯坦",
+    "currencyCn": "巴基斯坦卢比",
+    "code": "PKR"
+  },
+  {
+    "country": "巴林",
+    "currencyCn": "巴林第纳尔",
+    "code": "BHD"
+  },
+  {
+    "country": "巴西",
+    "currencyCn": "雷亚尔",
+    "code": "BRL"
+  },
+  {
+    "country": "白俄罗斯",
+    "currencyCn": "白俄罗斯卢布",
+    "code": "BYN"
+  },
+  {
+    "country": "保加利亚",
+    "currencyCn": "列弗",
+    "code": "BGN"
+  },
+  {
+    "country": "贝宁",
+    "currencyCn": "非洲金融共同体法郎",
+    "code": "XOF"
+  },
+  {
+    "country": "波兰",
+    "currencyCn": "兹罗提",
+    "code": "PLN"
+  },
+  {
+    "country": "布基纳法索",
+    "currencyCn": "非洲金融共同体法郎",
+    "code": "XOF"
+  },
+  {
+    "country": "布隆迪",
+    "currencyCn": "布隆迪法郎",
+    "code": "BIF"
+  },
+  {
+    "country": "赤道几内亚",
+    "currencyCn": "赤道几内亚埃奎勒",
+    "code": "GQE"
+  },
+  {
+    "country": "多哥",
+    "currencyCn": "非洲金融共同体法郎",
+    "code": "XOF"
+  },
+  {
+    "country": "俄罗斯",
+    "currencyCn": "卢布",
+    "code": "RUB"
+  },
+  {
+    "country": "菲律宾",
+    "currencyCn": "菲律宾比索",
+    "code": "PHP"
+  },
+  {
+    "country": "斐济",
+    "currencyCn": "斐济元",
+    "code": "FJD"
+  },
+  {
+    "country": "刚果",
+    "currencyCn": "中非金融合作法郎",
+    "code": "XAF"
+  },
+  {
+    "country": "哥伦比亚",
+    "currencyCn": "哥伦比亚比索",
+    "code": "COP"
+  },
+  {
+    "country": "格鲁吉亚",
+    "currencyCn": "拉里",
+    "code": "GEL"
+  },
+  {
+    "country": "哈萨克斯坦",
+    "currencyCn": "坚戈",
+    "code": "KZT"
+  },
+  {
+    "country": "韩国",
+    "currencyCn": "韩元",
+    "code": "KRW"
+  },
+  {
+    "country": "吉布提",
+    "currencyCn": "吉布提法郎",
+    "code": "DJF"
+  },
+  {
+    "country": "吉尔吉斯斯坦",
+    "currencyCn": "索姆",
+    "code": "KGS"
+  },
+  {
+    "country": "几内亚",
+    "currencyCn": "几内亚法郎",
+    "code": "GNF"
+  },
+  {
+    "country": "加拿大",
+    "currencyCn": "加拿大元",
+    "code": "CAD"
+  },
+  {
+    "country": "加纳",
+    "currencyCn": "塞地",
+    "code": "GHS"
+  },
+  {
+    "country": "加蓬",
+    "currencyCn": "中非金融合作法郎",
+    "code": "XAF"
+  },
+  {
+    "country": "捷克",
+    "currencyCn": "捷克克朗",
+    "code": "CZK"
+  },
+  {
+    "country": "津巴布韦",
+    "currencyCn": "津巴布韦元",
+    "code": "ZWL"
+  },
+  {
+    "country": "喀麦隆",
+    "currencyCn": "中非金融合作法郎",
+    "code": "XAF"
+  },
+  {
+    "country": "卡塔尔",
+    "currencyCn": "卡塔尔里亚尔",
+    "code": "QAR"
+  },
+  {
+    "country": "科摩罗",
+    "currencyCn": "科摩罗法郎",
+    "code": "KMF"
+  },
+  {
+    "country": "科特迪瓦",
+    "currencyCn": "非洲金融共同体法郎",
+    "code": "XOF"
+  },
+  {
+    "country": "科威特",
+    "currencyCn": "科威特第纳尔",
+    "code": "KWD"
+  },
+  {
+    "country": "克罗地亚",
+    "currencyCn": "库纳",
+    "code": "HRK"
+  },
+  {
+    "country": "肯尼亚",
+    "currencyCn": "肯尼亚先令",
+    "code": "KES"
+  },
+  {
+    "country": "黎巴嫩",
+    "currencyCn": "黎巴嫩镑",
+    "code": "LBP"
+  },
+  {
+    "country": "利比亚",
+    "currencyCn": "利比亚第纳尔",
+    "code": "LYD"
+  },
+  {
+    "country": "卢旺达",
+    "currencyCn": "卢旺达法郎",
+    "code": "RWF"
+  },
+  {
+    "country": "罗马尼亚",
+    "currencyCn": "列伊",
+    "code": "RON"
+  },
+  {
+    "country": "马达加斯加",
+    "currencyCn": "马达加斯加法郎",
+    "code": "MGF"
+  },
+  {
+    "country": "马尔代夫",
+    "currencyCn": "马尔代夫卢比",
+    "code": "MVR"
+  },
+  {
+    "country": "马来西亚",
+    "currencyCn": "马元",
+    "code": "MYR"
+  },
+  {
+    "country": "马里",
+    "currencyCn": "非洲金融共同体法郎",
+    "code": "XOF"
+  },
+  {
+    "country": "毛里求斯",
+    "currencyCn": "毛里求斯卢比",
+    "code": "MUR"
+  },
+  {
+    "country": "毛里塔尼亚",
+    "currencyCn": "乌吉亚",
+    "code": "MRU"
+  },
+  {
+    "country": "美国",
+    "currencyCn": "美元",
+    "code": "USD"
+  },
+  {
+    "country": "蒙古",
+    "currencyCn": "图格里克",
+    "code": "MNT"
+  },
+  {
+    "country": "孟加拉国",
+    "currencyCn": "塔卡",
+    "code": "BDT"
+  },
+  {
+    "country": "秘鲁",
+    "currencyCn": "索尔",
+    "code": "PEN"
+  },
+  {
+    "country": "缅甸",
+    "currencyCn": "缅元",
+    "code": "MMK"
+  },
+  {
+    "country": "摩洛哥",
+    "currencyCn": "摩洛哥迪拉姆",
+    "code": "MAD"
+  },
+  {
+    "country": "墨西哥",
+    "currencyCn": "墨西哥比索",
+    "code": "MXN"
+  },
+  {
+    "country": "南非",
+    "currencyCn": "兰特",
+    "code": "ZAR"
+  },
+  {
+    "country": "尼泊尔",
+    "currencyCn": "尼泊尔卢比",
+    "code": "NPR"
+  },
+  {
+    "country": "尼日尔",
+    "currencyCn": "非洲金融共同体法郎",
+    "code": "XOF"
+  },
+  {
+    "country": "尼日利亚",
+    "currencyCn": "奈拉",
+    "code": "NGN"
+  },
+  {
+    "country": "欧元区",
+    "currencyCn": "欧元",
+    "code": "EUR"
+  },
+  {
+    "country": "日本",
+    "currencyCn": "日圆",
+    "code": "JPY"
+  },
+  {
+    "country": "瑞士",
+    "currencyCn": "瑞士法郎",
+    "code": "CHF"
+  },
+  {
+    "country": "塞尔维亚",
+    "currencyCn": "塞尔维亚第纳尔",
+    "code": "RSD"
+  },
+  {
+    "country": "塞内加尔",
+    "currencyCn": "非洲金融共同体法郎",
+    "code": "XOF"
+  },
+  {
+    "country": "塞浦路斯",
+    "currencyCn": "塞浦路斯镑",
+    "code": "CYP"
+  },
+  {
+    "country": "塞舌尔",
+    "currencyCn": "塞舌尔卢比",
+    "code": "SCR"
+  },
+  {
+    "country": "沙特阿拉伯",
+    "currencyCn": "沙特里亚尔",
+    "code": "SAR"
+  },
+  {
+    "country": "斯里兰卡",
+    "currencyCn": "斯里兰卡卢比",
+    "code": "LKR"
+  },
+  {
+    "country": "苏丹",
+    "currencyCn": "苏丹镑",
+    "code": "SDG"
+  },
+  {
+    "country": "所罗门群岛",
+    "currencyCn": "所罗门元",
+    "code": "SBD"
+  },
+  {
+    "country": "索马里",
+    "currencyCn": "索马里先令",
+    "code": "SOS"
+  },
+  {
+    "country": "塔吉克斯坦",
+    "currencyCn": "索莫尼",
+    "code": "TJS"
+  },
+  {
+    "country": "泰国",
+    "currencyCn": "泰铢",
+    "code": "THB"
+  },
+  {
+    "country": "坦桑尼亚",
+    "currencyCn": "坦桑尼亚先令",
+    "code": "TZS"
+  },
+  {
+    "country": "突尼斯",
+    "currencyCn": "突尼斯第纳尔",
+    "code": "TND"
+  },
+  {
+    "country": "土耳其",
+    "currencyCn": "土耳其里拉",
+    "code": "TRY"
+  },
+  {
+    "country": "土库曼斯坦",
+    "currencyCn": "马纳特",
+    "code": "TMT"
+  },
+  {
+    "country": "瓦努阿图",
+    "currencyCn": "瓦图",
+    "code": "VUV"
+  },
+  {
+    "country": "委内瑞拉",
+    "currencyCn": "博利瓦",
+    "code": "VES"
+  },
+  {
+    "country": "乌干达",
+    "currencyCn": "乌干达先令",
+    "code": "UGX"
+  },
+  {
+    "country": "乌克兰",
+    "currencyCn": "格里夫纳",
+    "code": "UAH"
+  },
+  {
+    "country": "乌拉圭",
+    "currencyCn": "乌拉圭新比索",
+    "code": "UYU"
+  },
+  {
+    "country": "乌兹别克斯坦",
+    "currencyCn": "索姆",
+    "code": "UZS"
+  },
+  {
+    "country": "新加坡",
+    "currencyCn": "新加坡元",
+    "code": "SGD"
+  },
+  {
+    "country": "新喀里多尼亚",
+    "currencyCn": "太平洋法郎",
+    "code": "XPF"
+  },
+  {
+    "country": "新西兰",
+    "currencyCn": "新西兰元",
+    "code": "NZD"
+  },
+  {
+    "country": "匈牙利",
+    "currencyCn": "福林",
+    "code": "HUF"
+  },
+  {
+    "country": "叙利亚",
+    "currencyCn": "叙利亚镑",
+    "code": "SYP"
+  },
+  {
+    "country": "亚美尼亚",
+    "currencyCn": "德拉姆",
+    "code": "AMD"
+  },
+  {
+    "country": "也门",
+    "currencyCn": "也门里亚尔",
+    "code": "YER"
+  },
+  {
+    "country": "伊拉克",
+    "currencyCn": "伊拉克第纳尔",
+    "code": "IQD"
+  },
+  {
+    "country": "伊朗",
+    "currencyCn": "伊朗里亚尔",
+    "code": "IRR"
+  },
+  {
+    "country": "以色列",
+    "currencyCn": "以色列谢克尔",
+    "code": "ILS"
+  },
+  {
+    "country": "印度",
+    "currencyCn": "印度卢比",
+    "code": "INR"
+  },
+  {
+    "country": "印度尼西亚",
+    "currencyCn": "盾",
+    "code": "IDR"
+  },
+  {
+    "country": "英国",
+    "currencyCn": "英镑",
+    "code": "GBP"
+  },
+  {
+    "country": "约旦",
+    "currencyCn": "约旦第纳尔",
+    "code": "JOD"
+  },
+  {
+    "country": "越南",
+    "currencyCn": "越南盾",
+    "code": "VND"
+  },
+  {
+    "country": "赞比亚",
+    "currencyCn": "赞比亚克瓦查",
+    "code": "ZMW"
+  },
+  {
+    "country": "乍得",
+    "currencyCn": "中非金融合作法郎",
+    "code": "XAF"
+  },
+  {
+    "country": "智利",
+    "currencyCn": "智利比索",
+    "code": "CLP"
+  },
+  {
+    "country": "中非",
+    "currencyCn": "中非金融合作法郎",
+    "code": "XAF"
+  },
+  {
+    "country": "中国",
+    "currencyCn": "人民币元",
+    "code": "CNY"
+  },
+  {
+    "country": "中国澳门",
+    "currencyCn": "澳门元",
+    "code": "MOP"
+  },
+  {
+    "country": "中国台湾",
+    "currencyCn": "新台币",
+    "code": "TWD"
+  },
+  {
+    "country": "中国香港",
+    "currencyCn": "港元",
+    "code": "HKD"
+  }
+]
