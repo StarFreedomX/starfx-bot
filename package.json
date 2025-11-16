@@ -4,14 +4,13 @@
   "contributors": [
     "StarFreedomX <starfreedomx@outlook.com>"
   ],
-  "version": "0.19.2",
+  "version": "0.19.3",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
     "lib",
     "dist",
-    "assets",
-    "src/currency.json"
+    "assets"
   ],
   "license": "MIT",
   "homepage": "https://github.com/StarFreedomX/starfx-bot",

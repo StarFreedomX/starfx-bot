@@ -1146,7 +1146,7 @@ interface CurrencyCode {
 let currencyCodes: CurrencyCode[] = []
 export async function getCurrencyCodes(): Promise<CurrencyCode[]> {
   if (currencyCodes?.length) return currencyCodes;
-  currencyCodes = require(path.resolve(__dirname, './currency.json')) as CurrencyCode[]
+  currencyCodes = require(path.resolve(assetsDir, './currency.json')) as CurrencyCode[]
   return currencyCodes;
 }
 let currencyCodesMap: Record<string, string> = {};
