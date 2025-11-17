@@ -6,6 +6,8 @@ import mime from "mime-types";
 import pkg from '../package.json';
 
 export const name = 'starfx-bot'
+// ctx.broadcast 需要用到数据库
+export const inject = ['database'];
 export let baseDir: string;
 export let assetsDir: string;
 export const starfxLogger: Logger = new Logger('starfx-bot')
@@ -492,9 +494,9 @@ export function apply(ctx: Context, cfg: Config) {
   });
 
   if (process.env.NODE_ENV === 'development') {
-    ctx.command('test')
-      .action(async ({session}) => {
-        await session.send('               d   d                ')
+    ctx.command('test [params]')
+      .action(async ({session, options}, params) => {
+
       })
     ctx.middleware(async (session, next) => {
       return next();

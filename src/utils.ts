@@ -1,17 +1,17 @@
-import {Context, h, Random, Session} from "koishi";
+import { Context, h, Random, Session } from "koishi";
 import fs from "fs";
 import path from "node:path";
 import sharp from "sharp";
-import {Jimp} from "jimp";
-import {assetsDir, baseDir, Config, recordLink, starfxLogger} from "./index";
+import { Jimp } from "jimp";
+import { assetsDir, baseDir, Config, recordLink, starfxLogger } from "./index";
 import Parser from 'rss-parser';
 import 'chartjs-adapter-dayjs-3';
 import * as cheerio from 'cheerio';
-import {HttpProxyAgent} from "http-proxy-agent";
-import {HttpsProxyAgent} from "https-proxy-agent";
+import { HttpProxyAgent } from "http-proxy-agent";
+import { HttpsProxyAgent } from "https-proxy-agent";
 import axios from "axios";
-import {Chart, ChartItem, registerables,} from 'chart.js';
-import {Canvas} from 'skia-canvas';
+import { Chart, ChartItem, registerables } from 'chart.js';
+import { Canvas } from 'skia-canvas';
 
 Chart.register(
   ...registerables
