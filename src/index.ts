@@ -1,6 +1,9 @@
 import {Context, h, Logger, Random, Schema} from 'koishi'
 import * as fs from 'fs'
 import * as utils from './utils'
+import * as currency from './plugins/currencySearch'
+import * as getOriginImg from './plugins/getOriginImg'
+import * as drawHead from './plugins/drawHead'
 import path from "node:path";
 import mime from "mime-types";
 import pkg from '../package.json';
@@ -170,7 +173,7 @@ export function apply(ctx: Context, cfg: Config) {
     ctx.command('封印 [param]')
       .action(async ({session}, param) => {
         if (utils.detectControl(controlJson, session.guildId, "lock"))
-          await session.send(await utils.drawLock(ctx, await utils.getImageSrc(session, param)));
+          await session.send(await drawHead.drawLock(ctx, await utils.getImageSrc(session, param)));
       })
   }
   if (cfg.openSold) {
@@ -178,7 +181,7 @@ export function apply(ctx: Context, cfg: Config) {
       .action(async ({session}, param) => {
         //console.log('ssssss')
         if (utils.detectControl(controlJson, session.guildId, "sold"))
-          await session.send(await utils.drawSold(ctx, await utils.getImageSrc(session, param)));
+          await session.send(await drawHead.drawSold(ctx, await utils.getImageSrc(session, param)));
       })
   }
 
@@ -237,10 +240,10 @@ export function apply(ctx: Context, cfg: Config) {
       .option('band', '-b <band: string>')
       .action(async ({session, options}, param) => {
         if (utils.detectControl(controlJson, session.guildId, "bdbd")) {
-          const drawConfig = await utils.handleBanGDreamConfig(options);
+          const drawConfig = await drawHead.handleBanGDreamConfig(options);
           const imgSrc = await utils.getImageSrc(session, param);
           if (!imgSrc?.length) return '输入无效';
-          const imageBase64: string = await utils.drawBanGDream(imgSrc, drawConfig);
+          const imageBase64: string = await drawHead.drawBanGDream(imgSrc, drawConfig);
           if (!imageBase64?.length) return '输入无效';
           await session.send(h.image(imageBase64))
         }
@@ -383,17 +386,17 @@ export function apply(ctx: Context, cfg: Config) {
       .action(async ({session}, urls) => {
         if (utils.detectControl(controlJson, session.guildId, "originImg")) {
           let [xUrls, xIndex] = await Promise.all([
-            utils.getXUrl(session?.quote?.content),
-            utils.getXNum(session)
+            getOriginImg.getXUrl(session?.quote?.content),
+            getOriginImg.getXNum(session)
           ]);
           xIndex = xIndex.length ? xIndex : xUrls.map((_, i) => i);
           //console.log(`xIndex:${xIndex}`);
           //console.log(`xUrls:${xUrls}`);
           const filteredUrls = xIndex.filter(i => i >= 0 && i < xUrls.length).map(i => xUrls[i]);
           //console.log(filteredUrls)
-          const imageUrls = await utils.getXImage(cfg.originImgRSSUrl, filteredUrls);
+          const imageUrls = await getOriginImg.getXImage(cfg.originImgRSSUrl, filteredUrls);
           //console.log(imageUrls);
-          await utils.sendImages(session, cfg, imageUrls);
+          await getOriginImg.sendImages(session, cfg, imageUrls);
         }
       })
   }
@@ -408,7 +411,7 @@ export function apply(ctx: Context, cfg: Config) {
       .option('raw', '-r <raw:string>')
       .action(async ({session,options}, exchangeParam) => {
         if (utils.detectControl(controlJson, session.guildId, "exchangeRate")) {
-          return await utils.getExchangeRate(ctx,cfg,session,exchangeParam,options?.raw);
+          return await currency.getExchangeRate(ctx,cfg,session,exchangeParam,options?.raw);
         }
       })
   }
@@ -418,7 +421,7 @@ export function apply(ctx: Context, cfg: Config) {
       .action(async ({session}, exchangeParam) => {
         if (utils.detectControl(controlJson, session.guildId, "exchangeRate")) {
           const exchangeRatePath = path.join(assetsDir, 'exchangeRate.json');
-          return await utils.intervalGetExchangeRate(ctx,cfg,session,exchangeParam,exchangeRatePath);
+          return await currency.intervalGetExchangeRate(ctx,cfg,session,exchangeParam,exchangeRatePath);
         }
       })
   }
