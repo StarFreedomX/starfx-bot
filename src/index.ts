@@ -462,7 +462,7 @@ export function apply(ctx: Context, cfg: Config) {
       // 检查是否是 file:/// URI
       if (uri.startsWith('file:///')) {
         // 移除 'file:///' 前缀，并进行 URI 解码（例如，空格 %20 转换为 ' '）
-        return decodeURIComponent(uri.substring(8));
+        return decodeURIComponent(uri.substring(7));
       }
       return uri; // 如果不是 file:///，则原样返回
     }

@@ -118,4 +118,5 @@ StarFreedomX机器人的小功能，自用
 | `0.19.4` | inject database for ctx.broadcast |
 | `0.19.5` | 提取代码量较大的功能为单独插件                   |
 | `0.19.6` | 查汇率支持近5d                          |
-| `0.19.6` | base64转换捕获file协议                  |
+| `0.19.7` | base64转换捕获file协议                  |
+| `0.19.8` | base64适配linux目录                   |
