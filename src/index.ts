@@ -176,6 +176,7 @@ export function apply(ctx: Context, cfg: Config) {
           await session.send(await drawHead.drawLock(ctx, await utils.getImageSrc(session, param)));
       })
   }
+
   if (cfg.openSold) {
     ctx.command('卖掉了 [param]')
       .action(async ({session}, param) => {
@@ -281,7 +282,6 @@ export function apply(ctx: Context, cfg: Config) {
           await session.send(h.image(filepath));
         }
       });
-
   }
 
   for(const key in cfg.sendLocalImage){
@@ -428,26 +428,55 @@ export function apply(ctx: Context, cfg: Config) {
 
   if (cfg.filePathToBase64) {
     ctx.before('send', (session, options) => {
-      //console.log(session.elements)
       for (const element of session.elements) {
         const src = element.attrs?.src
         if (!src || !isLocalPath(src)) continue;
-        const mimeType = mime.lookup(src) || guessTypeFromElement(element.type) || 'application/octet-stream'
-        const base64 = toBase64String(src)
+        // 将 src 路径转换为文件系统可识别的路径
+        const filePath = convertUriToLocalPath(src);
+        // 获取 MIME 类型
+        const mimeType = mime.lookup(filePath) || guessTypeFromElement(element.type) || 'application/octet-stream'
+        // 读取文件并转换为 Base64
+        const base64 = toBase64String(filePath)
+        // 如果转换成功，更新 element 的 src
         if (base64) element.attrs.src = `data:${mimeType};base64,${base64}`
       }
     })
 
-    function isLocalPath(src: string) {
-      return /^([A-Za-z]:\\|\\\\|\/home\/|\/root\/)/.test(src)
+    /**
+     * 检查 src 字符串是否以本地路径格式开头。
+     * @param src - 待检查的字符串。
+     */
+    function isLocalPath(src: string): boolean {
+      // 正则表达式：识别任何本地路径的开始，包括 file:/// URI
+      // 匹配项：/ (Linux 根), \ (Windows 根/UNC), file:/// (URI), . (相对路径), C:\ (Windows 盘符), /home/, /root/, ../, ./
+      const LOCAL_PATH_REGEX = /^(\/|\\|file:\/\/\/|\.|[A-Za-z]:\\|\/home\/|\/root\/|\.\.\/|\.\/)/;
+      // 使用正则表达式进行本地路径检测
+      return LOCAL_PATH_REGEX.test(src)
     }
 
+    /**
+     * 将 (file:///) URI 转换为本地文件系统路径。
+     * @param uri - 可能是 file:/// 格式的 URI。
+     */
+    function convertUriToLocalPath(uri: string): string {
+      // 检查是否是 file:/// URI
+      if (uri.startsWith('file:///')) {
+        // 移除 'file:///' 前缀，并进行 URI 解码（例如，空格 %20 转换为 ' '）
+        return decodeURIComponent(uri.substring(8));
+      }
+      return uri; // 如果不是 file:///，则原样返回
+    }
+
+    /**
+     * 读取本地文件并将其转换为 Base64 字符串。
+     * @param src - 本地文件路径。
+     */
     function toBase64String(src: string): string {
       try {
         const data = fs.readFileSync(src)
         return data.toString('base64')
       }catch(err) {
-        console.error(err);
+        starfxLogger.error(`[Error] 无法读取本地文件 (${src}) 并转换为 Base64:`, err);
         return undefined;
       }
     }
@@ -487,12 +516,15 @@ export function apply(ctx: Context, cfg: Config) {
       }
     }
 
-    if (utils.detectControl(controlJson, session.guildId, "atNotSay"))
+    if (cfg.atNotSay && utils.detectControl(controlJson, session.guildId, "atNotSay"))
       await utils.atNotSayReply(cfg, session, elements);
-    if (utils.detectControl(controlJson, session.guildId, "replyBot"))
+
+    if (cfg.replyBot && utils.detectControl(controlJson, session.guildId, "replyBot"))
       await utils.replyBot(cfg, session, elements);
-    if (utils.detectControl(controlJson, session.guildId, "iLoveYou"))
+
+    if (cfg.iLoveYou && utils.detectControl(controlJson, session.guildId, "iLoveYou"))
       await utils.iLoveYou(cfg, session, elements);
+
     return next();
   });
 
