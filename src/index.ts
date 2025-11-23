@@ -429,16 +429,19 @@ export function apply(ctx: Context, cfg: Config) {
   if (cfg.filePathToBase64) {
     ctx.before('send', (session, options) => {
       for (const element of session.elements) {
+        console.log(element)
         const src = element.attrs?.src
         if (!src || !isLocalPath(src)) continue;
         // 将 src 路径转换为文件系统可识别的路径
         const filePath = convertUriToLocalPath(src);
+        console.log(filePath)
         // 获取 MIME 类型
         const mimeType = mime.lookup(filePath) || guessTypeFromElement(element.type) || 'application/octet-stream'
         // 读取文件并转换为 Base64
         const base64 = toBase64String(filePath)
         // 如果转换成功，更新 element 的 src
         if (base64) element.attrs.src = `data:${mimeType};base64,${base64}`
+        //console.log(element)
       }
     })
 
@@ -458,13 +461,54 @@ export function apply(ctx: Context, cfg: Config) {
      * 将 (file:///) URI 转换为本地文件系统路径。
      * @param uri - 可能是 file:/// 格式的 URI。
      */
+    /**
+     * 将 (file:///) URI 转换为本地文件系统路径。
+     * * 使用 URL API 来安全地解析文件URI，并确保在不同平台上的路径格式正确。
+     * @param uri - 可能是 file:/// 格式的 URI。
+     */
     function convertUriToLocalPath(uri: string): string {
-      // 检查是否是 file:/// URI
-      if (uri.startsWith('file:///')) {
-        // 移除 'file:///' 前缀，并进行 URI 解码（例如，空格 %20 转换为 ' '）
-        return decodeURIComponent(uri.substring(7));
+      // 1. 检查是否是 file:// URI
+      if (uri.startsWith('file://')) {
+        try {
+          const url = new URL(uri);
+
+          // url.pathname 包含了解码后的路径部分
+          let filePath = url.pathname;
+
+          // 2. 特殊处理 Windows 路径：
+          // 在 Windows 上，url.pathname 总是以斜杠开头，例如 /C:/path
+          // 必须移除这个多余的斜杠，否则可能导致 fs 模块解析为 C:\C:\path
+          if (process.platform === 'win32') {
+            // 检查路径是否是 /C:/... 这种格式
+            if (filePath.match(/^\/[A-Za-z]:\//)) {
+              // 移除第一个斜杠 /
+              filePath = filePath.substring(1);
+            } else {
+              // 如果是 UNC 路径 (如 //server)，url.pathname 会是 //server/share
+              // 在 Windows 上，需要 path.normalize 来处理双斜杠
+            }
+          }
+
+          // 3. Linux/Unix 路径：
+          // 对于 file:///home/user，url.pathname 返回 /home/user，根目录 / 被保留。
+
+          // 4. 标准化路径，处理斜杠/反斜杠，确保 fs 模块能识别
+          // 无论 Windows 还是 Linux，path.normalize 都能很好地处理格式
+          return path.normalize(filePath);
+
+        } catch (e) {
+          starfxLogger.error("URL解析失败:", e);
+          return uri; // 解析失败则返回原 URI
+        }
       }
-      return uri; // 如果不是 file:///，则原样返回
+
+      // 5. 处理非 URI 的本地路径 (如 /home/user 或 C:\path)
+      // 确保相对路径被正确解析，并标准化
+      if (path.isAbsolute(uri) || uri.startsWith('.') || uri.startsWith('..')) {
+        return path.normalize(uri);
+      }
+
+      return uri; // 如果不是 file:/// 也不是其他本地路径，则原样返回
     }
 
     /**
@@ -531,7 +575,9 @@ export function apply(ctx: Context, cfg: Config) {
   if (process.env.NODE_ENV === 'development') {
     ctx.command('test [params]')
       .action(async ({session, options}, params) => {
-
+        const mess = h.image("file:///E:/TEMP/saaya-birthday1.png")
+        console.log(mess)
+        await session.send(mess)
       })
     ctx.middleware(async (session, next) => {
       return next();
