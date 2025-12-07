@@ -581,12 +581,12 @@ export function apply(ctx: Context, cfg: Config) {
 	if (cfg.filePathToBase64) {
 		ctx.before("send", (session) => {
 			for (const element of session.elements) {
-				console.log(element);
+				// console.log(element);
 				const src = element.attrs?.src;
 				if (!src || !isLocalPath(src)) continue;
 				// 将 src 路径转换为文件系统可识别的路径
 				const filePath = convertUriToLocalPath(src);
-				console.log(filePath);
+				// console.log(filePath);
 				// 获取 MIME 类型
 				const mimeType =
 					mime.lookup(filePath) ||
