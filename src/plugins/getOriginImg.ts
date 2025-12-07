@@ -1,10 +1,10 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
-import { HttpProxyAgent } from "http-proxy-agent";
-import { HttpsProxyAgent } from "https-proxy-agent";
-import { h, type Session } from "koishi";
+import {HttpProxyAgent} from "http-proxy-agent";
+import {HttpsProxyAgent} from "https-proxy-agent";
+import {h, type Session} from "koishi";
 import Parser from "rss-parser";
-import type { Config } from "../index";
+import type {Config} from "../index";
 
 export async function getXUrl(urls: string) {
 	const regex = /https:\/\/x\.com\/([^/]+)\/status\/(\d+)/g;
@@ -91,13 +91,15 @@ export async function sendImages(
 }
 
 async function getXImageBase64(url: string, cfg: Config) {
-	const httpAgent = new HttpProxyAgent(cfg.proxyUrl);
-	const httpsAgent = new HttpsProxyAgent(cfg.proxyUrl);
-	axios.defaults.httpAgent = httpAgent;
-	axios.defaults.httpsAgent = httpsAgent;
-	const res = await axios.get(url, { responseType: "arraybuffer" });
+  const opts: any = {
+    responseType: "arraybuffer",
+  };
+  // 只有在提供 proxyUrl 时才启用代理
+  if (cfg.proxyUrl) {
+    opts.httpAgent = new HttpProxyAgent(cfg.proxyUrl);
+    opts.httpsAgent = new HttpsProxyAgent(cfg.proxyUrl);
+  }
+  const res = await axios.get(url, opts);
 	const base64 = Buffer.from(res.data, "binary").toString("base64");
-	const dataUrl = `data:image/png;base64,${base64}`;
-	console.log("success");
-	return dataUrl;
+  return `data:image/png;base64,${base64}`;
 }
