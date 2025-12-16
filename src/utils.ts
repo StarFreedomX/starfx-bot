@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
+import type _sharp from "@quanhuzeyu/sharp-for-koishi";
+import type { Sharp } from "@quanhuzeyu/sharp-for-koishi";
 import { type Context, h, Random, type Session } from "koishi";
-import sharp from "sharp";
 import { assetsDir, type Config, type recordLink, starfxLogger } from "./index";
 import "chartjs-adapter-dayjs-3";
 
@@ -51,7 +52,6 @@ export async function getRecord(
 	const links = structuredClone(cfg.recordLink);
 	links[gid] = { linkGroup: gid, linkWeight: 100 };
 	const selectGid = getRandomLinkGroup(links).replaceAll(":", "_");
-	// console.log(selectGid)
 	const recordDir = path.join(assetsDir, "record", selectGid);
 	const tagConfigPath = path.join(assetsDir, "tagConfig", `${selectGid}.json`);
 	if (!fs.existsSync(recordDir)) return null;
@@ -232,27 +232,40 @@ export async function getImageSrc(
 	//没有那么返回空值
 	return "";
 }
-
 /**
- * 从url下载图片并返回sharp对象
+ * 从url下载图片或读取本地文件并返回sharp对象
  * @param ctx Context
- * @param url 要下载的图片url
- * @return sharp对象或数字 -2代表url为空 -1代表下载异常
+ * @param url 要获取的图片路径 (http://..., https://... 或 本地路径)
+ * @return sharp对象
  */
-export async function getImageFromUrl(ctx: Context, url: string) {
-	if (!url) return -2;
+export async function getImageFromUrl(
+	ctx: Context,
+	url: string,
+): Promise<Sharp> {
+	if (!url) throw new Error("URL must be provided");
 
-	let image: sharp.Sharp;
-	const config = {
-		responseType: "arraybuffer" as "arraybuffer",
-	};
+	// 获取 Sharp 构造函数
+	const sharp: typeof _sharp = ctx.QhzySharp.Sharp;
+
 	try {
-		image = sharp(await ctx.http.get(url, config)).png();
+		let input: ArrayBuffer | string;
+
+		// 检测是否为网络地址 (http 或 https)
+		if (/^https?:\/\//i.test(url)) {
+			const config = {
+				responseType: "arraybuffer" as "arraybuffer",
+			};
+			input = await ctx.http.get(url, config);
+		} else {
+			input = url;
+		}
+
+		// sharp() 构造函数既支持 Buffer 也支持文件路径字符串
+		return sharp(input).png();
 	} catch (err) {
-		console.error(err);
-		return -1;
+		console.error(`Error processing image from ${url}:`, err);
+		throw new Error("Get image failed");
 	}
-	return image;
 }
 
 /**

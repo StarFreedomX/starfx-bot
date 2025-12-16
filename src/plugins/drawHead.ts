@@ -1,6 +1,8 @@
-import { Jimp } from "jimp";
-import { type Context, h, Random } from "koishi";
-import sharp from "sharp";
+import * as fsp from "node:fs/promises";
+import path from "node:path";
+import type _sharp from "@quanhuzeyu/sharp-for-koishi";
+import type { Sharp } from "@quanhuzeyu/sharp-for-koishi";
+import { type Context, h } from "koishi";
 import { assetsDir, baseDir, starfxLogger } from "../index";
 import { getImageFromUrl } from "../utils";
 
@@ -147,12 +149,20 @@ export async function handleBanGDreamConfig(options) {
  * @return 画完的图片 h对象
  */
 export async function drawLock(ctx: Context, baseImage: string) {
-	const image = await getImageFromUrl(ctx, baseImage);
-	if (image === -1) {
-		return "发生错误";
-	} else if (image === -2) {
-		return "输入无效";
+	let image: Sharp;
+	try {
+		image = await getImageFromUrl(ctx, baseImage);
+	} catch (error) {
+		if (error.message === "Get image failed") {
+			return "发生错误";
+		} else if (error.message === "URL must be provided") {
+			return "输入无效";
+		} else {
+			console.error(error.message);
+		}
 	}
+
+	const sharp: typeof _sharp = ctx.QhzySharp.Sharp;
 	const imageMetadata = await image.metadata();
 	const lockUrl = `${baseDir}/data/starfx-bot/assets/lock.png`;
 	const size1 = Math.min(imageMetadata.width, imageMetadata.height);
@@ -170,12 +180,19 @@ export async function drawLock(ctx: Context, baseImage: string) {
  * @return 画完的图片 h对象
  */
 export async function drawSold(ctx: Context, baseImage: string) {
-	const image = await getImageFromUrl(ctx, baseImage);
-	if (image === -1) {
-		return "发生错误";
-	} else if (image === -2) {
-		return "输入无效";
+	let image: Sharp;
+	try {
+		image = await getImageFromUrl(ctx, baseImage);
+	} catch (error) {
+		if (error.message === "Get image failed") {
+			return "发生错误";
+		} else if (error.message === "URL must be provided") {
+			return "输入无效";
+		} else {
+			console.error(error.message);
+		}
 	}
+	const sharp = ctx.QhzySharp.Sharp;
 	const imageMetadata = await image.metadata();
 	const size1 = Math.min(imageMetadata.width, imageMetadata.height);
 	image.resize({ width: size1, height: size1, fit: "cover" });
@@ -209,10 +226,12 @@ export async function drawSold(ctx: Context, baseImage: string) {
 
 /**
  * BanG Dream!边框绘制功能
+ * @param ctx Koishi上下文
  * @param avatar 要绘制的底图
  * @param inputOptions 输入参数，接受color band starType starNum border
  */
 export async function drawBanGDream(
+	ctx: Context,
 	avatar: string,
 	inputOptions?: {
 		color: string;
@@ -222,59 +241,111 @@ export async function drawBanGDream(
 		border: string;
 	},
 ) {
-	if (!avatar) {
-		return "";
-	}
+	if (!avatar) return "";
+
 	const colors = ["cool", "pure", "happy", "powerful"];
 	const bands = ["ppp", "ag", "pp", "r", "hhw", "ras", "mnk", "go"];
 	const starTypes = ["normal_star", "color_star"];
 	const starNums = [1, 2, 3, 4, 5];
-	//const borders = ['card-1', 'card-2', 'card-3', 'card-4', 'card-5'];
+
 	const options = {
-		color: inputOptions.color || Random.pick(colors),
-		band: inputOptions.band || Random.pick(bands),
-		starNum: inputOptions.starNum || Random.pick(starNums),
-		starType: inputOptions.starType || "",
-		border: inputOptions.border || "",
+		color:
+			inputOptions?.color || colors[Math.floor(Math.random() * colors.length)],
+		band: inputOptions?.band || bands[Math.floor(Math.random() * bands.length)],
+		starNum:
+			inputOptions?.starNum ||
+			starNums[Math.floor(Math.random() * starNums.length)],
+		starType: inputOptions?.starType || "",
+		border: inputOptions?.border || "",
 	};
+
 	options.starType ||=
-		options.starNum < 3 ? starTypes[0] : Random.pick(starTypes);
+		options.starNum < 3
+			? starTypes[0]
+			: starTypes[Math.floor(Math.random() * starTypes.length)];
 	options.border ||= `card-${starNums.includes(options.starNum) ? options.starNum : 5}${options.starNum === 1 ? `-${options.color}` : ""}`;
-
-	type JimpInstance = Awaited<ReturnType<typeof Jimp.read>>;
-	let image: JimpInstance;
 	try {
-		image = await Jimp.read(avatar);
-	} catch (e) {
-		starfxLogger.error(e);
-		return;
-	}
-	const [colorImage, bandImage, starImage, borderImage] = await Promise.all([
-		Jimp.read(`${assetsDir}/bangborder/${options.color}.png`),
-		Jimp.read(`${assetsDir}/bangborder/${options.band}.png`),
-		Jimp.read(`${assetsDir}/bangborder/${options.starType}.png`),
-		Jimp.read(`${assetsDir}/bangborder/${options.border}.png`),
-	]);
+		const zoom = 2;
 
-	const zoom = 2.0;
+		// 读取图片
+		const [avatarSharp, colorBuffer, bandBuffer, starBuffer, borderBuffer] =
+			await Promise.all([
+				getImageFromUrl(ctx, avatar),
+				fsp.readFile(
+					path.join(assetsDir, "bangborder", `${options.color}.png`),
+				),
+				fsp.readFile(path.join(assetsDir, "bangborder", `${options.band}.png`)),
+				fsp.readFile(
+					path.join(assetsDir, "bangborder", `${options.starType}.png`),
+				),
+				fsp.readFile(
+					path.join(assetsDir, "bangborder", `${options.border}.png`),
+				),
+			]);
+		const sharp: typeof _sharp = ctx.QhzySharp.Sharp;
+		// avatar cover 500*zoom
+		let image = avatarSharp.resize(500 * zoom, 500 * zoom, { fit: "cover" });
 
-	image.cover({ w: 500 * zoom, h: 500 * zoom });
-	borderImage.cover({ w: 500 * zoom, h: 500 * zoom });
-	image.composite(borderImage);
-	colorImage.cover({ w: 130 * zoom, h: 130 * zoom });
-	image.composite(colorImage, image.width - colorImage.width - 3 * zoom, 5.5);
-	bandImage.width > bandImage.height
-		? bandImage.resize({ w: 120 * zoom })
-		: bandImage.resize({ h: 120 * zoom });
-	image.composite(bandImage, 15 * zoom, 15 * zoom);
-	starImage.resize({ w: 90 * zoom });
-	const step = 60 * zoom;
-	let hei = 410 * zoom;
-	let times = options.starNum;
-	while (times > 0) {
-		image.composite(starImage, 10 * zoom, hei);
-		hei -= step;
-		times--;
+		// border cover 500*zoom
+		const borderImage = await sharp(borderBuffer)
+			.resize(500 * zoom, 500 * zoom, { fit: "cover" })
+			.toBuffer();
+
+		// color cover 130*zoom
+		const colorImage = await sharp(colorBuffer)
+			.resize(130 * zoom, 130 * zoom, { fit: "cover" })
+			.toBuffer();
+
+		// band resize 保持比例
+		let bandSharp = sharp(bandBuffer);
+		const bandMeta = await bandSharp.metadata();
+		if (bandMeta.width !== undefined && bandMeta.height !== undefined) {
+			if (bandMeta.width > bandMeta.height) {
+				bandSharp = bandSharp.resize({ width: Math.round(120 * zoom) });
+			} else {
+				bandSharp = bandSharp.resize({ height: Math.round(120 * zoom) });
+			}
+		} else {
+			starfxLogger.warn(
+				"Sharp metadata missing width or height. Skipping resize logic.",
+			);
+			return "无法识别图片Metadata";
+		}
+		const bandImage = await bandSharp.toBuffer();
+
+		// star resize 90*zoom
+		const starImage = await sharp(starBuffer)
+			.resize({ width: Math.round(90 * zoom) })
+			.toBuffer();
+
+		const starComposites = Array.from({ length: options.starNum }, (_, i) => ({
+			input: starImage,
+			left: Math.round(10 * zoom),
+			top: Math.round(410 * zoom - i * 60 * zoom),
+		}));
+
+		image = image.composite([
+			// composite border
+			{ input: borderImage, left: 0, top: 0 },
+			// composite color
+			{
+				input: colorImage,
+				left: Math.round(500 * zoom - 130 * zoom - 3 * zoom),
+				top: 6,
+			},
+			// composite band
+			{
+				input: bandImage,
+				left: Math.round(15 * zoom),
+				top: Math.round(15 * zoom),
+			},
+			// composite stars
+			...starComposites,
+		]);
+		const buffer = await image.png().toBuffer();
+		return `data:image/png;base64,${buffer.toString("base64")}`;
+	} catch (err) {
+		console.error(err);
+		return "";
 	}
-	return `data:image/png;base64,${(await image.getBuffer("image/jpeg")).toString("base64")}`;
 }

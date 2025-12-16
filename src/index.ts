@@ -1,5 +1,7 @@
 import * as fs from "node:fs";
 import path from "node:path";
+import type {} from "@ltxhhz/koishi-plugin-skia-canvas";
+import type {} from "@quanhuzeyu/koishi-plugin-qhzy-sharp";
 import { type Context, h, Logger, Random, Schema } from "koishi";
 import mime from "mime-types";
 import pkg from "../package.json";
@@ -9,14 +11,23 @@ import * as getOriginImg from "./plugins/getOriginImg";
 import * as utils from "./utils";
 
 export const name = "starfx-bot";
-// ctx.broadcast 需要用到数据库
 export const inject = {
-	optional: ["skia"],
+	optional: ["skia", "QhzySharp"],
 };
 export let baseDir: string;
 export let assetsDir: string;
 export const starfxLogger: Logger = new Logger("starfx-bot");
 
+export const usage = `
+<h1>StarFreedomX的自用插件</h1>
+<h2>可选功能依赖：</h2>
+<h3><a href="/market?keyword=skia-canvas">skia</a></h3>
+    <li>查汇率</li>
+<h3><a href="/market?keyword=@quanhuzeyu+sharp">QhzySharp</a></h3>
+    <li>卖掉了</li>
+    <li>封印</li>
+    <li>bdbd</li>
+  `;
 //复读共享上下文
 export const repeatContextMap = new Map<string, [string, number]>();
 
@@ -81,7 +92,6 @@ export interface Config {
 	//自用功能
 	originImg: boolean;
 	originImgRSSUrl: string;
-	proxyUrl: string;
 	filePathToBase64: boolean;
 
 	//功能控制
@@ -217,9 +227,6 @@ export const Config = Schema.intersect([
 			originImgRSSUrl: Schema.string()
 				.required()
 				.description("推特列表rss地址"),
-			proxyUrl: Schema.string()
-				.default("http://127.0.0.1:7890")
-				.description("代理地址"),
 		}),
 		Schema.object({}),
 	]),
@@ -232,9 +239,6 @@ export const Config = Schema.intersect([
 可配置功能键及语法详见 [项目地址](https://github.com/StarFreedomX/starfx-bot)或[npm发布页](https://www.npmjs.com/package/koishi-plugin-bangdream-ccg)`),
 	}).description("高级配置"),
 ]);
-
-export const usage = `<h2>StarFreedomX的自用插件 放了一些小功能</h2>
-  `;
 
 export function apply(ctx: Context, cfg: Config) {
 	ctx.i18n.define("zh-CN", require("./locales/zh-CN"));
@@ -249,7 +253,7 @@ export function apply(ctx: Context, cfg: Config) {
 
 	if (cfg.openLock) {
 		ctx.command("封印 [param]").action(async ({ session }, param) => {
-			if (utils.detectControl(controlJson, session.guildId, "lock"))
+			if (ctx.QhzySharp && utils.detectControl(controlJson, session.guildId, "lock"))
 				await session.send(
 					await drawHead.drawLock(ctx, await utils.getImageSrc(session, param)),
 				);
@@ -259,7 +263,7 @@ export function apply(ctx: Context, cfg: Config) {
 	if (cfg.openSold) {
 		ctx.command("卖掉了 [param]").action(async ({ session }, param) => {
 			//console.log('ssssss')
-			if (utils.detectControl(controlJson, session.guildId, "sold"))
+			if (ctx.QhzySharp && utils.detectControl(controlJson, session.guildId, "sold"))
 				await session.send(
 					await drawHead.drawSold(ctx, await utils.getImageSrc(session, param)),
 				);
@@ -352,11 +356,12 @@ export function apply(ctx: Context, cfg: Config) {
 			.option("train", "-t <train: string>")
 			.option("band", "-b <band: string>")
 			.action(async ({ session, options }, param) => {
-				if (utils.detectControl(controlJson, session.guildId, "bdbd")) {
+				if (ctx.QhzySharp && utils.detectControl(controlJson, session.guildId, "bdbd")) {
 					const drawConfig = await drawHead.handleBanGDreamConfig(options);
 					const imgSrc = await utils.getImageSrc(session, param);
 					if (!imgSrc?.length) return "输入无效";
 					const imageBase64: string = await drawHead.drawBanGDream(
+						ctx,
 						imgSrc,
 						drawConfig,
 					);
@@ -536,17 +541,18 @@ export function apply(ctx: Context, cfg: Config) {
 						cfg.originImgRSSUrl,
 						filteredUrls,
 					);
-					await getOriginImg.sendImages(ctx, session, cfg, imageUrls);
+					await getOriginImg.sendImages(ctx, session, imageUrls);
 				}
 			});
 	}
+
 	if (cfg.myId) {
 		ctx.command("my-gid").action(({ session }) => session.gid);
 		ctx.command("my-uid").action(({ session }) => session.uid);
 		ctx.command("my-cid").action(({ session }) => session.cid);
 	}
 
-	if (cfg.searchExchangeRate && ctx.skia) {
+	if (cfg.searchExchangeRate) {
 		ctx
 			.command("查汇率 <exchangeParam:text>")
 			.usage("查询当前汇率")
@@ -558,7 +564,7 @@ export function apply(ctx: Context, cfg: Config) {
 			)
 			.option("raw", "-r <raw:string>")
 			.action(async ({ session, options }, exchangeParam) => {
-				if (utils.detectControl(controlJson, session.guildId, "exchangeRate")) {
+				if (ctx.skia && utils.detectControl(controlJson, session.guildId, "exchangeRate")) {
 					return await currency.getExchangeRate(
 						ctx,
 						cfg,
@@ -570,11 +576,11 @@ export function apply(ctx: Context, cfg: Config) {
 			});
 	}
 
-	if (cfg.intervalGetExchangeRate && ctx.skia) {
+	if (cfg.intervalGetExchangeRate) {
 		ctx
 			.command("开启汇率推送 [exchangeParam:string]")
 			.action(async ({ session }, exchangeParam) => {
-				if (utils.detectControl(controlJson, session.guildId, "exchangeRate")) {
+				if (ctx.skia && utils.detectControl(controlJson, session.guildId, "exchangeRate")) {
 					const exchangeRatePath = path.join(assetsDir, "exchangeRate.json");
 					return await currency.intervalGetExchangeRate(
 						ctx,

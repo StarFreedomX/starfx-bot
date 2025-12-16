@@ -1,7 +1,5 @@
 import path from "node:path";
 // import { Canvas, loadImage } from "skia-canvas";
-// import { Canvas } from "koishi-plugin-skia-canvas"
-import type {} from "@ltxhhz/koishi-plugin-skia-canvas";
 import { Chart, type ChartItem, registerables } from "chart.js";
 import * as cheerio from "cheerio";
 import { type Context, h, type Session } from "koishi";
