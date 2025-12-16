@@ -1,10 +1,10 @@
-import axios from "axios";
+import axios, { type AxiosRequestConfig } from "axios";
 import * as cheerio from "cheerio";
-import {HttpProxyAgent} from "http-proxy-agent";
-import {HttpsProxyAgent} from "https-proxy-agent";
-import {h, type Session} from "koishi";
+import { HttpProxyAgent } from "http-proxy-agent";
+import { HttpsProxyAgent } from "https-proxy-agent";
+import { type Context, h, type Session } from "koishi";
 import Parser from "rss-parser";
-import type {Config} from "../index";
+import type { Config } from "../index";
 
 export async function getXUrl(urls: string) {
 	const regex = /https:\/\/x\.com\/([^/]+)\/status\/(\d+)/g;
@@ -70,6 +70,7 @@ export function chunk<T>(arr: T[], size: number): T[][] {
 }
 
 export async function sendImages(
+	ctx: Context,
 	session: Session,
 	cfg: Config,
 	imageUrls: string[],
@@ -77,7 +78,7 @@ export async function sendImages(
 	const chunks = chunk(imageUrls, 10);
 	for (const group of chunks) {
 		const messages = await Promise.all(
-			group.map(async (url) => h.image(await getXImageBase64(url, cfg))),
+			group.map(async (url) => h.image(await getXImageBase64(ctx, url, cfg))),
 		);
 		if (messages.length > 0) {
 			const message = messages.join("");
@@ -90,16 +91,16 @@ export async function sendImages(
 	}
 }
 
-async function getXImageBase64(url: string, cfg: Config) {
-  const opts: any = {
-    responseType: "arraybuffer",
-  };
-  // 只有在提供 proxyUrl 时才启用代理
-  if (cfg.proxyUrl) {
-    opts.httpAgent = new HttpProxyAgent(cfg.proxyUrl);
-    opts.httpsAgent = new HttpsProxyAgent(cfg.proxyUrl);
-  }
-  const res = await axios.get(url, opts);
+async function getXImageBase64(_ctx: Context, url: string, cfg: Config) {
+	const opts: AxiosRequestConfig = {
+		responseType: "arraybuffer",
+	};
+	// 只有在提供 proxyUrl 时才启用代理
+	if (cfg.proxyUrl) {
+		opts.httpAgent = new HttpProxyAgent(cfg.proxyUrl);
+		opts.httpsAgent = new HttpsProxyAgent(cfg.proxyUrl);
+	}
+	const res = await axios.get(url, opts);
 	const base64 = Buffer.from(res.data, "binary").toString("base64");
-  return `data:image/png;base64,${base64}`;
+	return `data:image/png;base64,${base64}`;
 }

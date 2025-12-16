@@ -1,8 +1,10 @@
 import path from "node:path";
+// import { Canvas, loadImage } from "skia-canvas";
+// import { Canvas } from "koishi-plugin-skia-canvas"
+import type {} from "@ltxhhz/koishi-plugin-skia-canvas";
 import { Chart, type ChartItem, registerables } from "chart.js";
 import * as cheerio from "cheerio";
 import { type Context, h, type Session } from "koishi";
-import { Canvas, loadImage } from "skia-canvas";
 import { assetsDir, type Config } from "../index";
 
 Chart.register(...registerables);
@@ -136,12 +138,14 @@ export async function getExchangeRate(
 			}
 
 			const monthChartBuffer = await drawCurrencyChartSkia(
+				ctx,
 				oneMonthPrice.prices,
 				oneMonthPrice.timeStamps,
 				`1 ${nowPrice.fromCurrency} to 1 ${nowPrice.currency}`,
 			);
 			// const monthImgSrc = "data:image/png;base64," + monthChartBuffer.toString("base64");
 			const day5ChartBuffer = await drawCurrencyChartSkia(
+				ctx,
 				fiveDayPrice.prices,
 				fiveDayPrice.timeStamps,
 				`1 ${nowPrice.fromCurrency} to 1 ${nowPrice.currency}`,
@@ -150,7 +154,7 @@ export async function getExchangeRate(
 			const mergeImgSrc =
 				"data:image/png;base64," +
 				(
-					await mergeBuffersVertical(day5ChartBuffer, monthChartBuffer)
+					await mergeBuffersVertical(ctx, day5ChartBuffer, monthChartBuffer)
 				).toString("base64");
 			result.push({
 				name: nowPrice.symbolName,
@@ -208,11 +212,13 @@ ${item.name}
 
 /**
  * 上下拼接两张图片 Buffer
+ * @param ctx2 koishi上下文
  * @param {Buffer} buf1 - 上图
  * @param {Buffer} buf2 - 下图
  * @returns {Promise<Buffer>} 合成后的 PNG Buffer
  */
-async function mergeBuffersVertical(buf1: Buffer, buf2: Buffer) {
+async function mergeBuffersVertical(ctx2: Context, buf1: Buffer, buf2: Buffer) {
+	const { Canvas, loadImage } = ctx2.skia;
 	const img1 = await loadImage(buf1);
 	const img2 = await loadImage(buf2);
 
@@ -471,6 +477,7 @@ async function getMSNPrices(
 
 /**
  * 绘制走势图
+ * @param ctx koishi上下文
  * @param prices 收盘价数组
  * @param timeStamps ISO 时间戳数组
  * @param title 图表标题
@@ -479,6 +486,7 @@ async function getMSNPrices(
  * @returns buffer
  */
 export async function drawCurrencyChartSkia(
+	ctx: Context,
 	prices: number[],
 	timeStamps: string[],
 	title = "兑换汇率",
@@ -497,7 +505,7 @@ export async function drawCurrencyChartSkia(
 		x: new Date(t),
 		y: prices[i],
 	}));
-
+	const { Canvas } = ctx.skia;
 	// 创建 skia-canvas
 	const canvas = new Canvas(width, height);
 

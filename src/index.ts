@@ -10,7 +10,9 @@ import * as utils from "./utils";
 
 export const name = "starfx-bot";
 // ctx.broadcast 需要用到数据库
-export const inject = ["database"];
+export const inject = {
+	optional: ["skia"],
+};
 export let baseDir: string;
 export let assetsDir: string;
 export const starfxLogger: Logger = new Logger("starfx-bot");
@@ -534,8 +536,7 @@ export function apply(ctx: Context, cfg: Config) {
 						cfg.originImgRSSUrl,
 						filteredUrls,
 					);
-					//console.log(imageUrls);
-					await getOriginImg.sendImages(session, cfg, imageUrls);
+					await getOriginImg.sendImages(ctx, session, cfg, imageUrls);
 				}
 			});
 	}
@@ -545,7 +546,7 @@ export function apply(ctx: Context, cfg: Config) {
 		ctx.command("my-cid").action(({ session }) => session.cid);
 	}
 
-	if (cfg.searchExchangeRate) {
+	if (cfg.searchExchangeRate && ctx.skia) {
 		ctx
 			.command("查汇率 <exchangeParam:text>")
 			.usage("查询当前汇率")
@@ -569,7 +570,7 @@ export function apply(ctx: Context, cfg: Config) {
 			});
 	}
 
-	if (cfg.intervalGetExchangeRate) {
+	if (cfg.intervalGetExchangeRate && ctx.skia) {
 		ctx
 			.command("开启汇率推送 [exchangeParam:string]")
 			.action(async ({ session }, exchangeParam) => {
