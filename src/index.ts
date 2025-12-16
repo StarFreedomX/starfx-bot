@@ -30,6 +30,26 @@ export const usage = `
   `;
 //复读共享上下文
 export const repeatContextMap = new Map<string, [string, number]>();
+const functionNames = [
+	"lock",
+	"sold",
+	"repeat",
+	"record",
+	"record-push",
+	"record-get",
+	"atNotSay",
+	"replyBot",
+	"iLoveYou",
+	"bdbd",
+	"roll",
+	"undo",
+	"echo",
+	"originImg",
+	"sendLocalImage",
+	"forward",
+	"exchangeRate",
+	"myId",
+];
 
 interface sendLocalImageConfigItem {
 	hiddenInHelp: boolean;
@@ -95,7 +115,11 @@ export interface Config {
 	filePathToBase64: boolean;
 
 	//功能控制
-	featureControl: string;
+	featureControl: Array<{
+		functionName: string;
+		whitelist: boolean;
+		groups: string;
+	}>;
 }
 
 export const Config = Schema.intersect([
@@ -232,11 +256,16 @@ export const Config = Schema.intersect([
 	]),
 
 	Schema.object({
-		featureControl: Schema.string()
-			.role("textarea", { rows: [15] })
-			.default("{\n\n}")
-			.description(`黑/白名单配置，语法为JSON格式(可以不缩进)，<br>
-可配置功能键及语法详见 [项目地址](https://github.com/StarFreedomX/starfx-bot)或[npm发布页](https://www.npmjs.com/package/koishi-plugin-bangdream-ccg)`),
+		featureControl: Schema.array(
+			Schema.object({
+				functionName: Schema.union(functionNames),
+				whitelist: Schema.boolean(),
+				groups: Schema.string(),
+			}),
+		)
+			.role("table")
+			.description(`黑/白名单配置，群组间用英文半角逗号分隔，<br>
+可配置功能键及用法详见 [项目地址](https://github.com/StarFreedomX/starfx-bot)或[npm发布页](https://www.npmjs.com/package/koishi-plugin-bangdream-ccg)`),
 	}).description("高级配置"),
 ]);
 
@@ -249,11 +278,14 @@ export function apply(ctx: Context, cfg: Config) {
 	initAssets();
 	// write your plugin here
 
-	const controlJson = utils.parseJsonControl(cfg.featureControl);
+	const featureControl = utils.parseFeatureControl(cfg.featureControl);
 
 	if (cfg.openLock) {
 		ctx.command("封印 [param]").action(async ({ session }, param) => {
-			if (ctx.QhzySharp && utils.detectControl(controlJson, session.guildId, "lock"))
+			if (
+				ctx.QhzySharp &&
+				utils.detectControl(featureControl, session.guildId, "lock")
+			)
 				await session.send(
 					await drawHead.drawLock(ctx, await utils.getImageSrc(session, param)),
 				);
@@ -263,7 +295,10 @@ export function apply(ctx: Context, cfg: Config) {
 	if (cfg.openSold) {
 		ctx.command("卖掉了 [param]").action(async ({ session }, param) => {
 			//console.log('ssssss')
-			if (ctx.QhzySharp && utils.detectControl(controlJson, session.guildId, "sold"))
+			if (
+				ctx.QhzySharp &&
+				utils.detectControl(featureControl, session.guildId, "sold")
+			)
 				await session.send(
 					await drawHead.drawSold(ctx, await utils.getImageSrc(session, param)),
 				);
@@ -272,7 +307,7 @@ export function apply(ctx: Context, cfg: Config) {
 
 	if (cfg.roll) {
 		ctx.command("roll").action(async ({ session }) => {
-			if (utils.detectControl(controlJson, session.guildId, "roll")) {
+			if (utils.detectControl(featureControl, session.guildId, "roll")) {
 				return utils.handleRoll(session);
 			}
 		});
@@ -283,7 +318,7 @@ export function apply(ctx: Context, cfg: Config) {
 			.command("echo <params>")
 			.option("time", "-t <time: number> 指定时间(min)")
 			.action(async ({ session, options }, params) => {
-				if (utils.detectControl(controlJson, session.guildId, "echo")) {
+				if (utils.detectControl(featureControl, session.guildId, "echo")) {
 					const elements = session.elements;
 					// console.log(elements)
 					const getEchoMessage = () => {
@@ -356,7 +391,10 @@ export function apply(ctx: Context, cfg: Config) {
 			.option("train", "-t <train: string>")
 			.option("band", "-b <band: string>")
 			.action(async ({ session, options }, param) => {
-				if (ctx.QhzySharp && utils.detectControl(controlJson, session.guildId, "bdbd")) {
+				if (
+					ctx.QhzySharp &&
+					utils.detectControl(featureControl, session.guildId, "bdbd")
+				) {
 					const drawConfig = await drawHead.handleBanGDreamConfig(options);
 					const imgSrc = await utils.getImageSrc(session, param);
 					if (!imgSrc?.length) return "输入无效";
@@ -374,8 +412,8 @@ export function apply(ctx: Context, cfg: Config) {
 	if (cfg.record) {
 		ctx.command("投稿 [param]").action(async ({ session }, param) => {
 			if (
-				utils.detectControl(controlJson, session.guildId, "record") &&
-				utils.detectControl(controlJson, session.guildId, "record-push")
+				utils.detectControl(featureControl, session.guildId, "record") &&
+				utils.detectControl(featureControl, session.guildId, "record-push")
 			) {
 				const imageSrc = await utils.getImageSrc(session, param, {
 					img: true,
@@ -396,8 +434,8 @@ export function apply(ctx: Context, cfg: Config) {
 		});
 		ctx.command("语录 [tag:string]").action(async ({ session }, tag) => {
 			if (
-				utils.detectControl(controlJson, session.guildId, "record") &&
-				utils.detectControl(controlJson, session.guildId, "record-get")
+				utils.detectControl(featureControl, session.guildId, "record") &&
+				utils.detectControl(featureControl, session.guildId, "record-get")
 			) {
 				const filepath = await utils.getRecord(
 					cfg,
@@ -416,8 +454,12 @@ export function apply(ctx: Context, cfg: Config) {
 			.command(key, { hidden: cfg.sendLocalImage[key].hiddenInHelp })
 			.action(async ({ session }) => {
 				if (
-					utils.detectControl(controlJson, session.guildId, "sendLocalImage") &&
-					utils.detectControl(controlJson, session.guildId, key)
+					utils.detectControl(
+						featureControl,
+						session.guildId,
+						"sendLocalImage",
+					) &&
+					utils.detectControl(featureControl, session.guildId, key)
 				)
 					return h.image(
 						utils.safeQuote(cfg.sendLocalImage[key].imgPath, false),
@@ -481,7 +523,7 @@ export function apply(ctx: Context, cfg: Config) {
 			.alias("撤回")
 			.usage("撤回消息")
 			.action(async ({ session }) => {
-				if (utils.detectControl(controlJson, session.guildId, "undo"))
+				if (utils.detectControl(featureControl, session.guildId, "undo"))
 					await utils.undo(cfg, session);
 			});
 	}
@@ -493,7 +535,7 @@ export function apply(ctx: Context, cfg: Config) {
 			.option("platform", "-p <platform:string>")
 			.usage("转发消息")
 			.action(async ({ session, options }) => {
-				if (utils.detectControl(controlJson, session.guildId, "forward")) {
+				if (utils.detectControl(featureControl, session.guildId, "forward")) {
 					const mapPath = path.join(assetsDir, "forward.json");
 					const groupMap: Map<string, string> = utils.readMap(mapPath);
 					if (options.group) {
@@ -528,7 +570,7 @@ export function apply(ctx: Context, cfg: Config) {
 			.alias("推特原图")
 			.usage("获取推特原图")
 			.action(async ({ session }) => {
-				if (utils.detectControl(controlJson, session.guildId, "originImg")) {
+				if (utils.detectControl(featureControl, session.guildId, "originImg")) {
 					let [xUrls, xIndex] = await Promise.all([
 						getOriginImg.getXUrl(session?.quote?.content),
 						getOriginImg.getXNum(session),
@@ -547,9 +589,27 @@ export function apply(ctx: Context, cfg: Config) {
 	}
 
 	if (cfg.myId) {
-		ctx.command("my-gid").action(({ session }) => session.gid);
-		ctx.command("my-uid").action(({ session }) => session.uid);
-		ctx.command("my-cid").action(({ session }) => session.cid);
+		ctx
+			.command("my-gid")
+			.action(({ session }) =>
+				utils.detectControl(featureControl, session.guildId, "myId")
+					? session.gid
+					: "",
+			);
+		ctx
+			.command("my-uid")
+			.action(({ session }) =>
+				utils.detectControl(featureControl, session.guildId, "myId")
+					? session.uid
+					: "",
+			);
+		ctx
+			.command("my-cid")
+			.action(({ session }) =>
+				utils.detectControl(featureControl, session.guildId, "myId")
+					? session.cid
+					: "",
+			);
 	}
 
 	if (cfg.searchExchangeRate) {
@@ -564,7 +624,10 @@ export function apply(ctx: Context, cfg: Config) {
 			)
 			.option("raw", "-r <raw:string>")
 			.action(async ({ session, options }, exchangeParam) => {
-				if (ctx.skia && utils.detectControl(controlJson, session.guildId, "exchangeRate")) {
+				if (
+					ctx.skia &&
+					utils.detectControl(featureControl, session.guildId, "exchangeRate")
+				) {
 					return await currency.getExchangeRate(
 						ctx,
 						cfg,
@@ -580,7 +643,10 @@ export function apply(ctx: Context, cfg: Config) {
 		ctx
 			.command("开启汇率推送 [exchangeParam:string]")
 			.action(async ({ session }, exchangeParam) => {
-				if (ctx.skia && utils.detectControl(controlJson, session.guildId, "exchangeRate")) {
+				if (
+					ctx.skia &&
+					utils.detectControl(featureControl, session.guildId, "exchangeRate")
+				) {
 					const exchangeRatePath = path.join(assetsDir, "exchangeRate.json");
 					return await currency.intervalGetExchangeRate(
 						ctx,
@@ -714,7 +780,7 @@ export function apply(ctx: Context, cfg: Config) {
 		const elements = session.elements;
 		if (
 			cfg.openRepeat &&
-			utils.detectControl(controlJson, session.guildId, "repeat")
+			utils.detectControl(featureControl, session.guildId, "repeat")
 		) {
 			const content = session.content; //获取消息内容
 			const ctxArr = repeatContextMap.get(session.gid); //获取上下文中存储的对话内容及次数
@@ -741,19 +807,19 @@ export function apply(ctx: Context, cfg: Config) {
 
 		if (
 			cfg.atNotSay &&
-			utils.detectControl(controlJson, session.guildId, "atNotSay")
+			utils.detectControl(featureControl, session.guildId, "atNotSay")
 		)
 			await utils.atNotSayReply(cfg, session, elements);
 
 		if (
 			cfg.replyBot &&
-			utils.detectControl(controlJson, session.guildId, "replyBot")
+			utils.detectControl(featureControl, session.guildId, "replyBot")
 		)
 			await utils.replyBot(cfg, session, elements);
 
 		if (
 			cfg.iLoveYou &&
-			utils.detectControl(controlJson, session.guildId, "iLoveYou")
+			utils.detectControl(featureControl, session.guildId, "iLoveYou")
 		)
 			await utils.iLoveYou(cfg, session, elements);
 

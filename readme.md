@@ -22,25 +22,26 @@ StarFreedomX机器人的小功能，自用
 * 撤回
 * 汇率推送
 * 黑白名单配置
+* 我的会话信息
 
 ## List to Do
 
-* 修改BanG Dream!边框的绘制为使用sharp等库，加快速度
+* 语录token通过聊天获取，并自动与语录web控制台通信
+* 语录支持bot端添加tag
 
 ## 语录tag可视化控制
 
 详情见[StarFreedomX/image-tag-editor-web: 为starfx-bot的语录功能可视化添加tag](https://github.com/StarFreedomX/image-tag-editor-web)
+
 配置项的imageFolderPath填写Koishi数据文件夹下的/data/starfx-bot/record/
 
 ## 🔧 功能权限控制（可选）
 
 本插件支持为各个功能设置 **群聊白名单 / 黑名单**，用于控制不同功能在指定群聊中是否启用。
 
-配置格式为 JSON
-
-- `whitelist: true`：启用白名单模式，仅允许列出的群使用该功能
-- `whitelist: false`：启用黑名单模式，禁止列出的群使用该功能
-- `groups`：群号数组，必须为数字
+- `whitelist: ✅`：启用白名单模式，仅允许列出的群使用该功能
+- `whitelist: 🟪`：启用黑名单模式，禁止列出的群使用该功能
+- `groups`：群号数组，必须为数字，用半角逗号分隔
 
 若未配置某功能项，则默认所有群均可使用。
 
@@ -68,23 +69,17 @@ StarFreedomX机器人的小功能，自用
 | `sendLocalImage` | 自定义指令发送图片功能(自定义指令也可配置，键为自定义的指令名称)     |
 | `forward`        | 消息转发功能                                |
 | `exchangeRate`   | 汇率播报功能                                |
+| `myId`           | 我的会话信息                                |
 
 ---
 
 ### 🧪 示例：仅允许特定群使用 `roll`，禁止某群使用 `sold`
 
-```json
-{
-  "roll": {
-    "whitelist": true,
-    "groups": [123456789,114514191]
-  },
-  "sold": {
-    "whitelist": false,
-    "groups": [987654321]
-  }
-}
-```
+
+| functionName | whitelist | groups    |
+|--------------|-----------|-----------|
+| roll         | ✅         | 123456789 |
+| sold         | 🟪        | 789456123 |
 
 ## 更新日志
 
@@ -130,3 +125,4 @@ StarFreedomX机器人的小功能，自用
 | `0.24.0`  | build                             |
 | `0.24.1`  | 检测sharp服务，删除无用配置                  |
 | `0.24.2`  | 修复检测逻辑                            |
+| `0.25.0`  | 优化功能控制模块                          |

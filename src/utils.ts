@@ -362,12 +362,28 @@ export async function iLoveYou(cfg: Config, session: Session, elements: h[]) {
 	}
 }
 
-export function parseJsonControl(text: string): FeatureControl | null {
+export function parseFeatureControl(
+	array: { functionName: string; whitelist: boolean; groups: string }[],
+): FeatureControl | null {
 	try {
-		return JSON.parse(text);
+		return (
+			Object.fromEntries(
+				array.map(({ functionName, whitelist, groups }) =>
+					functionName?.length
+						? [
+								functionName,
+								{
+									whitelist: !!whitelist,
+									groups: groups?.split(",")?.map(Number).filter(Boolean) || [],
+								},
+							]
+						: undefined,
+				),
+			) || {}
+		);
 	} catch (e) {
-		starfxLogger.warn("[功能控制] JSON 解析失败", e);
-		return null;
+		starfxLogger.warn("[功能控制] 解析失败", e);
+		return {};
 	}
 }
 
