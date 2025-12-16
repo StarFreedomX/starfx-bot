@@ -30,26 +30,6 @@ export const usage = `
   `;
 //复读共享上下文
 export const repeatContextMap = new Map<string, [string, number]>();
-const functionNames = [
-	"lock",
-	"sold",
-	"repeat",
-	"record",
-	"record-push",
-	"record-get",
-	"atNotSay",
-	"replyBot",
-	"iLoveYou",
-	"bdbd",
-	"roll",
-	"undo",
-	"echo",
-	"originImg",
-	"sendLocalImage",
-	"forward",
-	"exchangeRate",
-	"myId",
-];
 
 interface sendLocalImageConfigItem {
 	hiddenInHelp: boolean;
@@ -258,7 +238,7 @@ export const Config = Schema.intersect([
 	Schema.object({
 		featureControl: Schema.array(
 			Schema.object({
-				functionName: Schema.union(functionNames),
+				functionName: Schema.string(),
 				whitelist: Schema.boolean(),
 				groups: Schema.string(),
 			}),
@@ -278,7 +258,7 @@ export function apply(ctx: Context, cfg: Config) {
 	initAssets();
 	// write your plugin here
 
-	const featureControl = utils.parseFeatureControl(cfg.featureControl);
+	let featureControl = utils.parseFeatureControl(cfg.featureControl);
 
 	if (cfg.openLock) {
 		ctx.command("封印 [param]").action(async ({ session }, param) => {

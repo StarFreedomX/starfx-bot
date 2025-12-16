@@ -4,7 +4,7 @@
   "contributors": [
     "StarFreedomX <starfreedomx@outlook.com>"
   ],
-  "version": "0.25.0",
+  "version": "0.25.1",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -54,6 +54,7 @@
     "@biomejs/biome": "2.3.7",
     "@ltxhhz/koishi-plugin-skia-canvas": "^0.0.10",
     "@quanhuzeyu/koishi-plugin-qhzy-sharp": "^1.2.1",
-    "@quanhuzeyu/sharp-for-koishi": "^0.0.7"
+    "@quanhuzeyu/sharp-for-koishi": "^0.0.7",
+    "@types/mime-types": "^3.0.1"
   }
 }
