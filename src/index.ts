@@ -68,6 +68,9 @@ export interface Config {
 	replyBot: string;
 	sendLocalImage: sendLocalImageConfigDict;
 
+	//我的信息
+	myId: boolean;
+
 	//复读
 	openRepeat: boolean;
 	minRepeatTimes: number;
@@ -193,6 +196,9 @@ export const Config = Schema.intersect([
 			.default(0.3)
 			.description("复读发生概率"),
 	}).description("复读功能"),
+	Schema.object({
+		myId: Schema.boolean().default(false).description("查询gid uid cid"),
+	}).description("我的信息查询"),
 	Schema.object({
 		filePathToBase64: Schema.boolean()
 			.default(false)
@@ -521,12 +527,9 @@ export function apply(ctx: Context, cfg: Config) {
 						getOriginImg.getXNum(session),
 					]);
 					xIndex = xIndex.length ? xIndex : xUrls.map((_, i) => i);
-					//console.log(`xIndex:${xIndex}`);
-					//console.log(`xUrls:${xUrls}`);
 					const filteredUrls = xIndex
 						.filter((i) => i >= 0 && i < xUrls.length)
 						.map((i) => xUrls[i]);
-					//console.log(filteredUrls)
 					const imageUrls = await getOriginImg.getXImage(
 						cfg.originImgRSSUrl,
 						filteredUrls,
@@ -535,6 +538,11 @@ export function apply(ctx: Context, cfg: Config) {
 					await getOriginImg.sendImages(session, cfg, imageUrls);
 				}
 			});
+	}
+	if (cfg.myId) {
+		ctx.command("my-gid").action(({ session }) => session.gid);
+		ctx.command("my-uid").action(({ session }) => session.uid);
+		ctx.command("my-cid").action(({ session }) => session.cid);
 	}
 
 	if (cfg.searchExchangeRate) {
@@ -581,12 +589,10 @@ export function apply(ctx: Context, cfg: Config) {
 	if (cfg.filePathToBase64) {
 		ctx.before("send", (session) => {
 			for (const element of session.elements) {
-				// console.log(element);
 				const src = element.attrs?.src;
 				if (!src || !isLocalPath(src)) continue;
 				// 将 src 路径转换为文件系统可识别的路径
 				const filePath = convertUriToLocalPath(src);
-				// console.log(filePath);
 				// 获取 MIME 类型
 				const mimeType =
 					mime.lookup(filePath) ||
@@ -596,7 +602,6 @@ export function apply(ctx: Context, cfg: Config) {
 				const base64 = toBase64String(filePath);
 				// 如果转换成功，更新 element 的 src
 				if (base64) element.attrs.src = `data:${mimeType};base64,${base64}`;
-				//console.log(element)
 			}
 		});
 
