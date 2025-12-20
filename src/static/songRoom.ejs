@@ -11,17 +11,31 @@
     <style>
         /* 拖拽位置交换的动画 */
         .song-list-move {
-            transition: transform 0.4s cubic-bezier(0.2, 0, 0, 1);
+            transition: transform 0.4s cubic-bezier(0.2, 0, 0, 1) !important;
         }
 
-        /* 仅在 element.isNew 为 true 时触发的入场动画 */
+        /* 入场动画 */
         .slide-in-item {
             animation: slideInFromRight 0.5s cubic-bezier(0.2, 0, 0, 1) backwards;
+        }
+
+        /* 离场动画 */
+        .slide-out-item {
+            /* 只针对删除相关的属性做过渡，不要写 transition: all */
+            transition: opacity 0.4s ease, margin 0.4s ease, padding 0.4s ease;
+            animation: slideOutToRight 0.4s cubic-bezier(0.2, 0, 0, 1) forwards;
+            pointer-events: none; /* 防止删除中被误操作 */
         }
 
         @keyframes slideInFromRight {
             from { opacity: 0; transform: translateX(50px); }
             to { opacity: 1; transform: translateX(0); }
+        }
+
+        @keyframes slideOutToRight {
+            from { opacity: 1; transform: translateX(0); }
+            to { opacity: 0; transform: translateX(100px);
+                margin-bottom: -80px; padding-top: 0; padding-bottom: 0; }
         }
 
         .ghost-card { opacity: 0.2; background: #6366f1 !important; }
@@ -62,14 +76,12 @@
         <template #item="{ element }">
             <div :key="element.id"
                  :class="['song-card bg-white mb-3 p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center group',
-                         element.isNew ? 'slide-in-item' : '']">
+                 element.isNew ? 'slide-in-item' : '',
+                 element.isDeleting ? 'slide-out-item' : '']">
 
                 <div class="drag-handle p-2 mr-3 text-slate-300 hover:text-indigo-500 transition">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                         stroke-linecap="round">
-                        <line x1="3" y1="12" x2="21" y2="12"></line>
-                        <line x1="3" y1="6" x2="21" y2="6"></line>
-                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                        <line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line>
                     </svg>
                 </div>
                 <div class="flex-1 min-w-0">
@@ -77,8 +89,7 @@
                     <div class="text-xs text-slate-400 truncate">{{ element.url || '暂无链接' }}</div>
                 </div>
                 <button @click="remove(element)" class="ml-4 p-2 text-slate-200 hover:text-red-500 transition">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                         stroke-linecap="round">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                         <polyline points="3 6 5 6 21 6"></polyline>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                     </svg>
@@ -104,35 +115,83 @@
             const isDragging = ref(false)
             const form = ref({ title: '', url: '' })
 
+            // 1. 修改 commitOp，防止前端标记传给后端导致 500 错误
             const commitOp = async (opData) => {
+                // 清洗数据：不要把 Vue 的动画标记传给后端
+                const cleanSong = opData.song ? { ...opData.song } : null;
+                if (cleanSong) {
+                    delete cleanSong.isNew;
+                    delete cleanSong.isDeleting;
+                }
+
                 try {
                     const res = await fetch(`/songRoom/api/${roomId}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             idArrayHash: lastHash.value,
-                            ...opData
+                            ...opData,
+                            song: cleanSong
                         })
-                    }).then(r => r.json())
+                    }).then(r => r.json());
 
                     if (res.success) {
-                        // 【核心改进】
-                        // 服务器已成功处理并重演了所有操作，返回了最终一致的 Hash
-                        // 我们直接同步本地 Hash，这样下次 load 轮询时，
-                        // 携带这个新 Hash 访问后端，后端会因为 Hash 一致返回 changed: false
                         lastHash.value = res.hash;
                         return true;
                     } else if (res.code === 'REJECT') {
-                        // 只有在彻底冲突（如异地同时删改）时，才强制重刷
                         lastHash.value = "";
                         await load();
                     }
                 } catch (e) {
                     console.error("API Error:", e);
-                    // 网络失败时，建议回滚或提示刷新，保证数据最终一致
                     await load();
                 }
                 return false;
+            }
+
+// 2. 修改 add 函数，计算正确的 toIndex
+            const add = async () => {
+                if(!form.value.title) return;
+
+                // 计算有效长度（排除正在删除的）
+                const effectiveLen = songs.value.filter(s => !s.isDeleting).length;
+
+                const newSong = {
+                    id: 's-' + Math.random().toString(36).slice(2, 11),
+                    ...form.value,
+                    isNew: true
+                };
+
+                songs.value.push(newSong);
+                form.value = { title: '', url: '' };
+
+                setTimeout(() => {
+                    const target = songs.value.find(s => s.id === newSong.id);
+                    if (target) target.isNew = false;
+                }, 600);
+
+                const success = await commitOp({
+                    song: newSong,
+                    toIndex: effectiveLen // 使用排除删除项后的索引
+                });
+                if (!success) await load();
+            }
+
+// 3. 修改 remove 函数，实现先离场再删除
+            const remove = async (songObj) => {
+                // 第一步：打上删除标记触发 CSS 动画
+                songObj.isDeleting = true;
+
+                // 第二步：等待动画结束 (400ms) 再真正移除数据并请求后端
+                setTimeout(async () => {
+                    // 彻底从数组中过滤掉
+                    songs.value = songs.value.filter(s => s.id !== songObj.id);
+
+                    await commitOp({
+                        song: songObj,
+                        toIndex: -1
+                    });
+                }, 400);
             }
 
             // load 函数修改
@@ -177,46 +236,7 @@
                 }
             }
 
-            // 处理添加歌曲
-            // 处理添加歌曲
-            const add = async () => {
-                if(!form.value.title) return
-                const newSong = {
-                    id: 's-' + Math.random().toString(36).slice(2, 11),
-                    ...form.value,
-                    isNew: true // 【关键：手动添加时也要设为 true】
-                }
-                const currentLen = songs.value.length
 
-                // 乐观更新：本地先插入
-                songs.value.push(newSong)
-                form.value = { title: '', url: '' }
-
-                // 【新增：动画跑完后把标记关掉，防止以后拖拽它时触发动画】
-                setTimeout(() => {
-                    const target = songs.value.find(s => s.id === newSong.id);
-                    if (target) target.isNew = false;
-                }, 600);
-
-                // 发送添加指令
-                const success = await commitOp({
-                    song: newSong,
-                    toIndex: currentLen
-                })
-                if (!success) await load()
-            }
-
-            // 处理删除歌曲
-            const remove = async (songObj) => {
-                // 乐观更新：本地先移除
-                songs.value = songs.value.filter(s => s.id !== songObj.id)
-
-                // 发送删除指令：toIndex 约定为 -1
-                await commitOp({
-                    song: songObj,
-                    toIndex: -1
-                })
-            }
 
             let timer
             onMounted(() => {
