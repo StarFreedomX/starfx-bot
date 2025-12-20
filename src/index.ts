@@ -1026,6 +1026,62 @@ export function apply(ctx: Context, cfg: Config) {
             koaCtx.body = html
         })
 
+        // 默认入口页面：输入房间号
+        ctx.server.get('/songRoom', async (koaCtx) => {
+            koaCtx.type = 'html';
+            koaCtx.body = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>进入 KTV 房间</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <style>
+            @keyframes slideUp {
+                from { opacity: 0; transform: translateY(20px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            .animate-pop { animation: slideUp 0.5s ease-out; }
+        </style>
+    </head>
+    <body class="bg-slate-50 min-h-screen flex items-center justify-center p-6 text-slate-900">
+        <div class="w-full max-w-sm bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 animate-pop">
+            <header class="text-center mb-8">
+                <h1 class="text-4xl font-black text-indigo-600 mb-2">KTV Queue</h1>
+                <p class="text-slate-400 font-medium">输入房间号进入房间</p>
+            </header>
+
+            <div class="space-y-4">
+                <input id="roomInput" type="text" maxlength="10"
+                    class="w-full px-6 py-4 bg-slate-50 rounded-2xl text-center text-2xl font-bold tracking-widest outline-none focus:ring-4 focus:ring-indigo-100 transition-all border-2 border-transparent focus:border-indigo-400"
+                    placeholder="0000" autofocus>
+
+                <button onclick="joinRoom()"
+                    class="w-full py-4 bg-indigo-600 text-white text-lg font-bold rounded-2xl hover:bg-indigo-700 active:scale-95 transition-all shadow-lg shadow-indigo-100">
+                    进入房间
+                </button>
+            </div>
+
+            <p class="text-center text-slate-300 text-xs mt-8 uppercase tracking-widest font-bold">Powered by StarFreedomX</p>
+        </div>
+
+        <script>
+            function joinRoom() {
+                const id = document.getElementById('roomInput').value.trim();
+                if (id) {
+                    window.location.href = \`/songRoom/\${id}\`;
+                }
+            }
+            // 支持回车键跳转
+            document.getElementById('roomInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') joinRoom();
+            });
+        </script>
+    </body>
+    </html>
+    `;
+        });
     }
 
 	ctx.middleware(async (session, next) => {
