@@ -9,6 +9,16 @@
     <script src="https://cdn.jsdelivr.net/npm/vuedraggable@4.1.0/dist/vuedraggable.umd.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        /* 变动高亮动画 */
+        .highlight-change {
+            animation: pulseHighlight 1s ease;
+        }
+
+        @keyframes pulseHighlight {
+            0% { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2); }
+            50% { border-color: #6366f1; box-shadow: 0 0 12px 4px rgba(99, 102, 241, 0.3); }
+            100% { border-color: #e2e8f0; box-shadow: none; } /* 恢复到 slate-200 */
+        }
         /* 拖拽位置交换的动画 */
         .song-list-move {
             transition: transform 0.4s cubic-bezier(0.2, 0, 0, 1) !important;
@@ -88,10 +98,10 @@
     >
         <template #item="{ element }">
             <div :key="element.id"
-                 :is-deleting="element.isDeleting ? 'true' : 'false'"
                  :class="['song-card bg-white mb-3 p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center group',
                  element.isNew ? 'slide-in-item' : '',
-                 element.isDeleting ? 'slide-out-item' : '']">
+                 element.isDeleting ? 'slide-out-item' : '',
+                 element.isMoved ? 'highlight-change' : '']">
 
                 <div class="drag-handle p-2 mr-3 text-slate-300 hover:text-indigo-500 transition">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -254,11 +264,11 @@
                         const oldSongs = [...songs.value];
                         const newSongsData = res.list;
 
-                        // 1. 建立旧 ID 映射
-                        const oldIdMap = new Map();
-                        oldSongs.forEach((s, i) => oldIdMap.set(s.id, i));
+                        // 1. 建立旧 ID -> Index 映射
+                        const oldMap = new Map();
+                        oldSongs.forEach((s, i) => oldMap.set(s.id, { index: i, isDeleting: s.isDeleting }));
 
-                        // 2. 找到【即将被删除】的歌并标记动画
+                        // 2. 标记即将被删除的（跑删除动画）
                         const newIdSet = new Set(newSongsData.map(s => s.id));
                         let hasRemoved = false;
                         oldSongs.forEach(s => {
@@ -268,32 +278,34 @@
                             }
                         });
 
-                        // 如果有删除，先给 400ms 跑删除动画
                         const syncDelay = hasRemoved ? 400 : 0;
 
                         setTimeout(() => {
-                            // 3. 计算 LIS 确定哪些元素保持相对顺序不动
-                            const source = newSongsData.map(s => oldIdMap.get(s.id) ?? -1);
-                            const lisIndices = new Set(getLISIndices(source));
-
-                            // 4. 构建最终列表并标记新元素
+                            // 3. 构建新列表并标记 [新增] 或 [位置变动]
                             const finalProcessedList = newSongsData.map((s, newIdx) => {
-                                const oldIdx = oldIdMap.get(s.id);
-                                const isNew = oldIdx === undefined;
-                                // 如果不是新歌，且不在 LIS 序列中，它会通过 draggable 的 move 动画移动
+                                const oldInfo = oldMap.get(s.id);
+                                const isNew = !oldInfo;
+
+                                // 位置变动判定：原本存在，且索引与现在不同
+                                const isMoved = oldInfo && oldInfo.index !== newIdx;
+
                                 return {
                                     ...s,
-                                    isNew: isNew && oldSongs.length > 0 // 仅在非首次加载时标记入场
+                                    isNew: isNew && oldSongs.length > 0,
+                                    isMoved: isMoved // 新标记
                                 };
                             });
 
                             songs.value = finalProcessedList;
                             lastHash.value = res.hash;
 
-                            // 5. 清理入场标记
+                            // 4. 一段时间后移除所有临时状态
                             setTimeout(() => {
-                                songs.value.forEach(s => s.isNew = false);
-                            }, 800);
+                                songs.value.forEach(s => {
+                                    s.isNew = false;
+                                    s.isMoved = false;
+                                });
+                            }, 1200);
                         }, syncDelay);
                     }
                 } catch (e) { console.error("Load Error:", e); }
