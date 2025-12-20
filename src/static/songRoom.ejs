@@ -9,9 +9,15 @@
     <script src="https://cdn.jsdelivr.net/npm/vuedraggable@4.1.0/dist/vuedraggable.umd.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 变动高亮动画 */
-        .highlight-change {
-            animation: pulseHighlight 1s ease;
+
+        /* 置顶成功后的特殊反馈 */
+        .highlight-top {
+            animation: pulseTop 1s ease;
+        }
+
+        @keyframes pulseTop {
+            0% { border-color: #f97316; background-color: #fff7ed; }
+            100% { border-color: #e2e8f0; background-color: white; }
         }
 
         @keyframes pulseHighlight {
@@ -73,11 +79,11 @@
 
         /* 当进入删除状态时，触发 transition 坍塌 */
         .slide-out-item[is-deleting="true"] {
-            max-height: 0 !important;
+            /*max-height: 0 !important;*/
             margin-bottom: 0 !important;
             margin-top: 0 !important;
-            padding-top: 0 !important;
-            padding-bottom: 0 !important;
+            /*padding-top: 0 !important;*/
+            /*padding-bottom: 0 !important;*/
             opacity: 0;
         }
 
@@ -109,7 +115,7 @@
 
     <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-6 space-y-3">
         <input v-model="form.title" @keyup.enter="add" class="w-full px-4 py-2 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-400 transition" placeholder="歌曲名称">
-        <input v-model="form.url" @keyup.enter="add" class="w-full px-4 py-2 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-400 transition" placeholder="跳转链接 (必填)">
+        <input v-model="form.url" @keyup.enter="add" class="w-full px-4 py-2 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-400 transition" placeholder="链接 (必填)">
         <button @click="add" class="w-full py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 active:scale-95 transition shadow-lg shadow-indigo-100">
             确认添加
         </button>
@@ -134,6 +140,7 @@
                  element.isNew ? 'slide-in-item' : '',
                  element.isDeleting ? 'slide-out-item' : '',
                  element.isMoved ? 'highlight-change' : '',
+                 element.isTop ? 'highlight-top' : '',
                  element.isAffected ? 'highlight-affected' : '']">
 
                 <div class="drag-handle p-2 mr-3 text-slate-300 hover:text-indigo-500 transition" @click.stop>
@@ -146,6 +153,13 @@
                     <div class="font-bold text-slate-700 truncate group-hover:text-indigo-600 transition">{{ element.title }}</div>
                     <div class="text-xs text-slate-400 truncate">{{ element.url }}</div>
                 </div>
+
+                <button @click.stop="moveToTop(element)" class="p-2 text-slate-300 hover:text-orange-500 transition" title="置顶">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <path d="M12 19V5M5 12l7-7 7 7"/>
+                    </svg>
+                </button>
+
                 <button @click.stop="startEdit(element)" class="p-2 text-slate-300 hover:text-indigo-500 transition">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -431,6 +445,44 @@
                 editForm.value = { title: song.title, url: song.url };
             };
 
+            const moveToTop = async (song) => {
+                // 1. 如果已经在第一位，无需操作
+                if (songs.value[0]?.id === song.id) return;
+
+                // 2. 这里的逻辑与 load 中的“主动移动”一致
+                // 我们先在本地模拟移动，触发 LIS 识别逻辑和动画
+                const oldIndex = songs.value.findIndex(s => s.id === song.id);
+                if (oldIndex !== -1) {
+                    // 标记为正在移动，以便 load 函数能正确处理动画（如果此时刚好触发 load）
+                    song.isDeleting = true;
+
+                    setTimeout(async () => {
+                        // 从原位置移除
+                        const [movedItem] = songs.value.splice(oldIndex, 1);
+                        // 插入到最前面
+                        songs.value.unshift(movedItem);
+
+                        // 重置状态并触发高亮
+                        movedItem.isDeleting = false;
+                        movedItem.isTop = true;
+                        movedItem.isNew = true;
+
+                        // 3. 发送给后端，toIndex: 0 代表第 0 个锚点（首位）
+                        const success = await commitOp({
+                            song: movedItem,
+                            toIndex: 0
+                        });
+
+                        if (!success) {
+                            await load(); // 失败则重载列表
+                        } else {
+                            // 成功后延迟移除高亮
+                            setTimeout(() => { movedItem.isTop = false; movedItem.isNew = false; }, 1000);
+                        }
+                    }, 300); // 这里的延迟为了配合 CSS 离场感
+                }
+            };
+
             // 保存逻辑
             const saveEdit = async () => {
                 if (!editForm.value.title || !editForm.value.url) return;
@@ -470,7 +522,7 @@
             })
             onUnmounted(() => clearInterval(timer))
 
-            return { songs, form, add, remove, onDragChange, lastHash, isDragging, goToLink, startEdit, saveEdit, editingSong, editForm }
+            return { songs, form, add, remove, onDragChange, lastHash, isDragging, goToLink, startEdit, saveEdit, editingSong, editForm, moveToTop }
         }
     }).mount('#app')
 </script>
