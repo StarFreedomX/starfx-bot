@@ -19,6 +19,27 @@
             50% { border-color: #6366f1; box-shadow: 0 0 12px 4px rgba(99, 102, 241, 0.3); }
             100% { border-color: #e2e8f0; box-shadow: none; } /* 恢复到 slate-200 */
         }
+        /* 主动变动： Indigo 强烈闪烁 */
+        .highlight-change {
+            animation: pulseHighlight 1s ease;
+        }
+
+        /* 被动受影响： Slate 弱闪烁 */
+        .highlight-affected {
+            animation: pulseAffected 0.8s ease;
+        }
+
+        @keyframes pulseHighlight {
+            0% { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2); }
+            50% { border-color: #6366f1; box-shadow: 0 0 12px 4px rgba(99, 102, 241, 0.3); }
+            100% { border-color: #e2e8f0; }
+        }
+
+        @keyframes pulseAffected {
+            0% { background-color: #f8fafc; }
+            50% { background-color: #f1f5f9; border-color: #cbd5e1; }
+            100% { background-color: white; border-color: #e2e8f0; }
+        }
         /* 拖拽位置交换的动画 */
         .song-list-move {
             transition: transform 0.4s cubic-bezier(0.2, 0, 0, 1) !important;
@@ -41,7 +62,7 @@
 
             /* 关键：用 transition 平滑缩小高度，而不是用 animation */
             transition: max-height 0.4s ease, margin 0.4s ease, padding 0.4s ease, opacity 0.4s ease;
-            max-height: 72px; /* 设一个比卡片实际高度略大的值 */
+            max-height: 100px; /* 设一个比卡片实际高度略大的值 */
             overflow: hidden;
             pointer-events: none;
         }
@@ -101,7 +122,9 @@
                  :class="['song-card bg-white mb-3 p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center group',
                  element.isNew ? 'slide-in-item' : '',
                  element.isDeleting ? 'slide-out-item' : '',
-                 element.isMoved ? 'highlight-change' : '']">
+                 element.isMoved ? 'highlight-change' : '',
+                 element.isAffected ? 'highlight-affected' : '']">
+
 
                 <div class="drag-handle p-2 mr-3 text-slate-300 hover:text-indigo-500 transition">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -264,49 +287,60 @@
                         const oldSongs = [...songs.value];
                         const newSongsData = res.list;
 
-                        // 1. 建立旧 ID -> Index 映射
-                        const oldMap = new Map();
-                        oldSongs.forEach((s, i) => oldMap.set(s.id, { index: i, isDeleting: s.isDeleting }));
+                        // 1. 计算 ID 映射
+                        const oldIdMap = new Map();
+                        oldSongs.forEach((s, i) => { if (!s.isDeleting) oldIdMap.set(s.id, i); });
 
-                        // 2. 标记即将被删除的（跑删除动画）
-                        const newIdSet = new Set(newSongsData.map(s => s.id));
-                        let hasRemoved = false;
-                        oldSongs.forEach(s => {
-                            if (!newIdSet.has(s.id) && !s.isDeleting) {
-                                s.isDeleting = true;
-                                hasRemoved = true;
+                        // 2. 识别“主动移动”的 ID
+                        const source = newSongsData.map(s => oldIdMap.has(s.id) ? oldIdMap.get(s.id) : -1);
+                        const lisIndices = new Set(getLISIndices(source));
+
+                        const activeMoveIds = new Set();
+                        newSongsData.forEach((s, newIdx) => {
+                            const oldIdx = oldIdMap.get(s.id);
+                            // 只有既不在 LIS 里、又不是真正的新歌，才是我们要处理的“改动元素”
+                            if (oldIdx !== undefined && oldIdx !== newIdx && !lisIndices.has(newIdx)) {
+                                activeMoveIds.add(s.id);
                             }
                         });
 
-                        const syncDelay = hasRemoved ? 400 : 0;
+                        // 3. 第一阶段：让删除项和“改动项”一起执行退出动画
+                        const newIdSet = new Set(newSongsData.map(s => s.id));
+                        oldSongs.forEach(s => {
+                            // 如果是服务器删了，或者它是主动移动项，执行退出
+                            if (!newIdSet.has(s.id) || activeMoveIds.has(s.id)) {
+                                s.isDeleting = true;
+                            }
+                        });
 
+                        // 4. 第二阶段：等待退出动画完成
                         setTimeout(() => {
-                            // 3. 构建新列表并标记 [新增] 或 [位置变动]
-                            const finalProcessedList = newSongsData.map((s, newIdx) => {
-                                const oldInfo = oldMap.get(s.id);
-                                const isNew = !oldInfo;
+                            // 构建最终列表
+                            songs.value = newSongsData.map((s, newIdx) => {
+                                const oldIdx = oldIdMap.get(s.id);
+                                const isNew = oldIdx === undefined;
+                                const isActiveMove = activeMoveIds.has(s.id);
 
-                                // 位置变动判定：原本存在，且索引与现在不同
-                                const isMoved = oldInfo && oldInfo.index !== newIdx;
+                                // 被动移动的判定（在 LIS 里但位置变了）
+                                const isAffected = !isNew && !isActiveMove && oldIdx !== newIdx;
 
                                 return {
                                     ...s,
-                                    isNew: isNew && oldSongs.length > 0,
-                                    isMoved: isMoved // 新标记
+                                    // 如果是真新歌，或者是我们刚才主动剔除的改动项，施加入场动画
+                                    isNew: (isNew || isActiveMove) && oldSongs.length > 0,
+                                    isAffected: isAffected
                                 };
                             });
 
-                            songs.value = finalProcessedList;
                             lastHash.value = res.hash;
 
-                            // 4. 一段时间后移除所有临时状态
+                            // 5. 第三阶段：清理状态
                             setTimeout(() => {
                                 songs.value.forEach(s => {
-                                    s.isNew = false;
-                                    s.isMoved = false;
+                                    s.isNew = s.isAffected = false;
                                 });
-                            }, 1200);
-                        }, syncDelay);
+                            }, 1000);
+                        }, 400); // 这里的 400ms 对应你 CSS 里 slide-out 的时间
                     }
                 } catch (e) { console.error("Load Error:", e); }
             };

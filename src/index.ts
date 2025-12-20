@@ -834,7 +834,6 @@ export function apply(ctx: Context, cfg: Config) {
             };
         });
 
-        // 核心 Move 逻辑
         // 核心 Move/Add/Delete 逻辑
         ctx.server.post('/songRoom/api/:roomId', async (koaCtx) => {
             const { roomId } = koaCtx.params;
