@@ -790,9 +790,11 @@ export function apply(ctx: Context, cfg: Config) {
         const roomOpCache: Record<string, OpLog[]> = {}
         const roomSongsCache: Record<string, Song[]> = {}
 
-        // 生成哈希工具函数
-        function getHash(ids: string[]) {
-            return crypto.createHash('md5').update(ids.join(',')).digest('hex')
+        // --- 修改 1：生成哈希工具函数 ---
+        function getHash(songs: Song[]) {
+            // 将 id, title, url 连成字符串。如果包含特殊字符，建议用 JSON.stringify
+            const content = songs.map(s => `${s.id}|${s.title}|${s.url}`).join(',');
+            return crypto.createHash('md5').update(content).digest('hex');
         }
 
         // 每 5 分钟检测并清理 5 分钟前的缓存
@@ -806,23 +808,29 @@ export function apply(ctx: Context, cfg: Config) {
 
 
         // 获取歌曲列表及当前哈希
+        // --- 修改 2：获取 API 逻辑 ---
         ctx.server.get('/songRoom/api/:roomId', async (koaCtx) => {
             const { roomId } = koaCtx.params;
-            const { lastHash: clientHash } = koaCtx.query; // 获取客户端传来的 Hash
+            const { lastHash: clientHash } = koaCtx.query;
 
             if (!roomSongsCache[roomId]?.length){
                 roomSongsCache[roomId] = (await ctx.cache.get("ktv_room", roomId) || [])
             }
 
-            const ids = roomSongsCache[roomId].map(s => s.id);
-            const serverHash = getHash(ids);
+            // 传入整个 songs 数组而不是 ids
+            const serverHash = getHash(roomSongsCache[roomId]);
 
-            // 初始化缓存快照逻辑保持不变...
             if (!roomOpCache[roomId]) {
-                roomOpCache[roomId] = [{ idArray: ids, hash: serverHash, song: null, toIndex: -1, timestamp: Date.now() }];
+                // OpLog 里的 idArray 建议也改为全量数据备份，或者至少在重演时能拿到内容
+                roomOpCache[roomId] = [{
+                    idArray: roomSongsCache[roomId].map(s => s.id), // 顺序校验仍用 ID
+                    hash: serverHash,
+                    song: null,
+                    toIndex: -1,
+                    timestamp: Date.now()
+                }];
             }
 
-            // --- 优化点：Hash 校验 ---
             if (clientHash === serverHash) {
                 return koaCtx.body = { changed: false, hash: serverHash };
             }
@@ -875,7 +883,7 @@ export function apply(ctx: Context, cfg: Config) {
 
             // 更新缓存与数据库
             const finalIds = finalSongs.map(s => s.id);
-            const finalHash = getHash(finalIds);
+            const finalHash = getHash(finalSongs);
 
             // 完善 OpLog：记录本次操作后的最终状态，供下一个并发请求作为 base
             currentOp.idArray = finalIds;
@@ -891,32 +899,22 @@ export function apply(ctx: Context, cfg: Config) {
 
 
         function songOperation(nowSongs: Song[], songIdArray: string[], ops: OpLog[]): Song[] {
-            /*
-            实现逻辑：首先构造双向链表
-            HEAD <-> 0 <-> A <-> 1 <-> B <-> 2 <-> C <-> 3 <-> D <-> 4 <-> E <-> 5 <-> F <-> 6 <-> G <-> 7 <-> TAIL
-            对于接下来的Ops采用双向链表操作实现
-            op1: A -> 4
-            op2: B -> 6
-            ...
-            那么将很简单，让 A 的前后元素相连变为 0 <-> 1
-            然后把prev(4) <-> 4 改为 prev(4) <-> A <-> 4 ......
-            以此类推
-             */
             // --- 第一步：构建最新的 Song 状态池 ---
-            // 无论是新增还是修改，OpLog 里的 song 总是代表该 ID 最新的元数据
             const latestSongMap = new Map<string, Song>();
 
-            // 先存入当前已有的歌曲
-            nowSongs.forEach(s => latestSongMap.set(s.id, s));
+            // 初始数据判空
+            if (Array.isArray(nowSongs)) {
+                nowSongs.forEach(s => s && s.id && latestSongMap.set(s.id, s));
+            }
 
-            // 用 OpLog 里的最新数据覆盖（按时间戳顺序处理）
-            ops.sort((a, b) => a.timestamp - b.timestamp).forEach(op => {
-                if (op.toIndex !== -1) { // 只要不是删除，就更新状态
+            // 更新状态池，增加 op 和 song 的安全校验
+            [...ops].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0)).forEach(op => {
+                if (op?.song?.id && op.toIndex !== -1) {
                     latestSongMap.set(op.song.id, op.song);
                 }
             });
 
-            // --- 第二步：双向链表处理 ID 顺序 ---
+            // --- 第二步：双向链表处理 ---
             class ListNode {
                 val: string | number;
                 prev: ListNode | null = null;
@@ -926,79 +924,91 @@ export function apply(ctx: Context, cfg: Config) {
 
             const head = new ListNode('HEAD');
             let current = head;
-            // 歌曲id -> 链表节点
             const idNodes = new Map<string, ListNode>();
-            // 数字 -> 链表节点
             const anchorNodes = new Map<number, ListNode>();
 
-            // 初始化原始链表
-            for (let i = 0; i <= songIdArray.length; i++) {
+            // 初始化链表：这里是受控循环，结构是稳定的
+            for (let i = 0; i <= (songIdArray?.length || 0); i++) {
                 const anchorNode = new ListNode(i);
-                // 添加数字节点
                 anchorNodes.set(i, anchorNode);
+
                 current.next = anchorNode;
                 anchorNode.prev = current;
                 current = anchorNode;
 
                 if (i < songIdArray.length) {
                     const id = songIdArray[i];
-                    const idNode = new ListNode(id);
-                    // 添加歌曲id节点
-                    idNodes.set(id, idNode);
-                    current.next = idNode;
-                    idNode.prev = current;
-                    current = idNode;
+                    if (id !== undefined && id !== null) {
+                        const idNode = new ListNode(id);
+                        idNodes.set(id, idNode);
+                        current.next = idNode;
+                        idNode.prev = current;
+                        current = idNode;
+                    }
                 }
             }
 
-            // 执行移动/增删逻辑
+            // 执行逻辑
             ops.forEach(op => {
+                if (!op?.song?.id) return;
                 const { song, toIndex } = op;
                 let node = idNodes.get(song.id);
 
-                // 1. 断开旧连接 (如果已存在)
-                if (node) {
-                    node.prev!.next = node.next;
-                    node.next!.prev = node.prev;
+                // 1. 安全断开旧连接
+                if (node && node.prev) {
+                    const prevNode = node.prev;
+                    const nextNode = node.next;
+                    prevNode.next = nextNode;
+                    if (nextNode) {
+                        nextNode.prev = prevNode;
+                    }
+                    // 彻底切断当前节点的旧联系，防止逻辑干扰
+                    node.prev = null;
+                    node.next = null;
                 }
 
-                // 2. 如果是删除操作，直接移除引用并结束
+                // 2. 删除操作
                 if (toIndex === -1) {
                     idNodes.delete(song.id);
                     return;
                 }
 
-                // 3. 如果是新增，创建新节点
+                // 3. 创建/重用节点
                 if (!node) {
                     node = new ListNode(song.id);
                     idNodes.set(song.id, node);
                 }
 
-                // 4. 挂载到指定的数字锚点前
+                // 4. 安全挂载到锚点
                 const targetAnchor = anchorNodes.get(toIndex);
-                if (targetAnchor) {
-                    const before = targetAnchor.prev!;
+                // 必须确保 targetAnchor 存在，且由于 HEAD 的存在，targetAnchor.prev 理论上不为空
+                if (targetAnchor && targetAnchor.prev) {
+                    const before = targetAnchor.prev;
+
                     before.next = node;
                     node.prev = before;
+
                     node.next = targetAnchor;
                     targetAnchor.prev = node;
                 }
             });
 
-            // --- 第三步：转换回 Song 对象数组 ---
+            // --- 第三步：转换回数组 ---
             const result: Song[] = [];
-            let p = head.next;
-            while (p) {
+            let p: ListNode | null = head.next;
+
+            while (p !== null) {
                 if (typeof p.val === 'string' && p.val !== 'HEAD') {
-                    const latestSong = latestSongMap.get(p.val);
-                    if (latestSong) result.push(latestSong);
+                    const songData = latestSongMap.get(p.val);
+                    if (songData) {
+                        result.push(songData);
+                    }
                 }
                 p = p.next;
             }
 
             return result;
         }
-
 
         // WebUI 托管
         // 访问地址示例：http://localhost:5140/songRoom/12345

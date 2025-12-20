@@ -130,11 +130,11 @@
             <div :key="element.id"
                  @click="goToLink(element.url)"
                  :is-deleting="element.isDeleting ? 'true' : 'false'"
-                 :class="['song-card bg-white mb-3 p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center group transition-all cursor-pointer hover:border-indigo-300 active:scale-[0.98]',
-                     element.isNew ? 'slide-in-item' : '',
-                     element.isDeleting ? 'slide-out-item' : '',
-                     element.isMoved ? 'highlight-change' : '',
-                     element.isAffected ? 'highlight-affected' : '']">
+                 :class="['song-card bg-white mb-3 p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center group',
+                 element.isNew ? 'slide-in-item' : '',
+                 element.isDeleting ? 'slide-out-item' : '',
+                 element.isMoved ? 'highlight-change' : '',
+                 element.isAffected ? 'highlight-affected' : '']">
 
                 <div class="drag-handle p-2 mr-3 text-slate-300 hover:text-indigo-500 transition" @click.stop>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -208,11 +208,11 @@
 
             // 1. 修改 commitOp，防止前端标记传给后端导致 500 错误
             const commitOp = async (opData) => {
-                // 清洗数据：不要把 Vue 的动画标记传给后端
                 const cleanSong = opData.song ? { ...opData.song } : null;
                 if (cleanSong) {
-                    delete cleanSong.isNew;
-                    delete cleanSong.isDeleting;
+                    // 剔除所有前端动画状态标记，防止后端校验失败或存储多余字段
+                    const keysToRemove = ['isNew', 'isDeleting', 'isMoved', 'isAffected'];
+                    keysToRemove.forEach(k => delete cleanSong[k]);
                 }
 
                 try {
@@ -220,22 +220,21 @@
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            idArrayHash: lastHash.value,
+                            idArrayHash: lastHash.value, // 这个 Hash 现在代表了旧列表的内容+顺序
                             ...opData,
                             song: cleanSong
                         })
                     }).then(r => r.json());
 
                     if (res.success) {
-                        lastHash.value = res.hash;
+                        lastHash.value = res.hash; // 得到包含新 title/url 的新 Hash
                         return true;
                     } else if (res.code === 'REJECT') {
-                        lastHash.value = "";
+                        lastHash.value = ""; // Hash 冲突，强制 load 最新数据
                         await load();
                     }
                 } catch (e) {
                     console.error("API Error:", e);
-                    await load();
                 }
                 return false;
             }
@@ -440,25 +439,23 @@
                 const index = songs.value.findIndex(s => s.id === song.id);
 
                 if (index !== -1) {
-                    // 先记录旧数据用于回滚
-                    const oldTitle = song.title;
-                    const oldUrl = song.url;
+                    const oldData = { title: song.title, url: song.url };
 
-                    // 乐观更新：直接改本地数据
+                    // 乐观更新 UI
                     song.title = editForm.value.title;
                     song.url = editForm.value.url;
 
                     const success = await commitOp({
                         song: song,
-                        toIndex: index // 原位更新
+                        toIndex: index // 原位覆盖更新
                     });
 
                     if (success) {
                         editingSong.value = null;
                     } else {
-                        // 失败则回滚
-                        song.title = oldTitle;
-                        song.url = oldUrl;
+                        // 失败回退
+                        song.title = oldData.title;
+                        song.url = oldData.url;
                     }
                 }
             };
