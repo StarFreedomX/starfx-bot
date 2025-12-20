@@ -9,33 +9,28 @@
     <script src="https://cdn.jsdelivr.net/npm/vuedraggable@4.1.0/dist/vuedraggable.umd.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 1. 保持拖拽时的平滑移动 (由 draggable 接管) */
+        /* 1. 拖拽时的平滑移动动画（必须保留） */
         .song-list-move {
             transition: transform 0.4s cubic-bezier(0.2, 0, 0, 1);
         }
 
-        /* 2. 定义一个原生的 CSS 动画，用于“从无到有”的瞬间 */
-        @keyframes slideInFromRight {
-            from {
-                opacity: 0;
-                transform: translateX(50px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-
-        /* 3. 应用到列表项上 */
-        .song-card {
-            /* 当元素被加入 DOM 时自动触发 */
+        /* 2. 只有在加载状态下，song-card 才有入场动画 */
+        .is-loading .song-card {
             animation: slideInFromRight 0.5s cubic-bezier(0.2, 0, 0, 1) backwards;
         }
 
-        .ghost-card {
-            opacity: 0.2;
-            background: #6366f1 !important;
+        /* 3. 为每个元素增加一点点延迟，让滑入更有层次感 (可选) */
+        .is-loading .song-card:nth-child(n) {
+            animation-delay: calc(var(--i) * 0.05s);
         }
+
+        @keyframes slideInFromRight {
+            from { opacity: 0; transform: translateX(50px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .ghost-card { opacity: 0.2; background: #6366f1 !important; }
+        .drag-handle { cursor: grab; }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen p-4 sm:p-8 text-slate-900">
@@ -58,31 +53,35 @@
         </button>
     </div>
 
-    <draggable
-            v-model="songs"
-            item-key="id"
-            handle=".drag-handle"
-            ghost-class="ghost-card"
-            :animation="300"
-            @start="isDragging = true"
-            @end="isDragging = false"
-            @change="onDragChange"
-    >
-        <template #item="{ element }">
-            <div :key="element.id" class="song-card bg-white mb-3 p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center group">
-                <div class="drag-handle p-2 mr-3 text-slate-300 hover:text-indigo-500 transition">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+    <div id="app" :class="['max-w-md mx-auto', { 'is-loading': loading }]" v-cloak>
+        <draggable
+                v-model="songs"
+                item-key="id"
+                handle=".drag-handle"
+                ghost-class="ghost-card"
+                :animation="300"
+                @start="isDragging = true"
+                @end="isDragging = false"
+                @change="onDragChange"
+        >
+            <template #item="{ element, index }">
+                <div :key="element.id"
+                     :style="{ '--i': index }"
+                     class="song-card bg-white mb-3 p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center group">
+                    <div class="drag-handle p-2 mr-3 text-slate-300 hover:text-indigo-500 transition">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="font-bold text-slate-700 truncate">{{ element.title }}</div>
+                        <div class="text-xs text-slate-400 truncate">{{ element.url || '暂无链接' }}</div>
+                    </div>
+                    <button @click="remove(element)" class="ml-4 p-2 text-slate-200 hover:text-red-500 transition">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    </button>
                 </div>
-                <div class="flex-1 min-w-0">
-                    <div class="font-bold text-slate-700 truncate">{{ element.title }}</div>
-                    <div class="text-xs text-slate-400 truncate">{{ element.url || '暂无链接' }}</div>
-                </div>
-                <button @click="remove(element)" class="ml-4 p-2 text-slate-200 hover:text-red-500 transition">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                </button>
-            </div>
-        </template>
-    </draggable>
+            </template>
+        </draggable>
+    </div>
 
     <div v-if="songs.length === 0" class="text-center py-20 text-slate-300">
         列表是空的
@@ -130,7 +129,7 @@
                 }
                 return false;
             }
-
+            const loading = ref(false);
             const load = async () => {
                 if (isDragging.value) return;
                 try {
@@ -138,9 +137,20 @@
                     const res = await fetch(url).then(r => r.json());
 
                     if (res.changed) {
-                        // 第一次载入时，所有 div 同时触发 @keyframes 动画
+                        // 如果这是第一次加载（songs 为空），开启动画锁
+                        if (songs.value.length === 0) {
+                            loading.value = true;
+                        }
+
                         songs.value = res.list;
                         lastHash.value = res.hash;
+
+                        // 动画执行时间大约 0.5s，我们 0.8s 后永久关闭这个动画锁
+                        if (loading.value) {
+                            setTimeout(() => {
+                                loading.value = false;
+                            }, 800);
+                        }
                     }
                 } catch (e) {
                     console.error("Load Error:", e);
@@ -205,7 +215,7 @@
             })
             onUnmounted(() => clearInterval(timer))
 
-            return { songs, form, add, remove, onDragChange, lastHash, isDragging }
+            return { songs, form, add, remove, onDragChange, lastHash, isDragging, loading }
         }
     }).mount('#app')
 </script>
