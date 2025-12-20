@@ -1,9 +1,13 @@
 import * as fs from "node:fs";
 import path from "node:path";
 import type {} from "@ltxhhz/koishi-plugin-skia-canvas";
+import type {} from "@koishijs/plugin-server";
+import type {} from "@koishijs/cache";
 import type {} from "@quanhuzeyu/koishi-plugin-qhzy-sharp";
 import { type Context, h, Logger, Random, Schema } from "koishi";
+import * as crypto from 'crypto'
 import mime from "mime-types";
+import ejs from 'ejs'
 import pkg from "../package.json";
 import * as currency from "./plugins/currencySearch";
 import * as drawHead from "./plugins/drawHead";
@@ -12,8 +16,29 @@ import * as utils from "./utils";
 
 export const name = "starfx-bot";
 export const inject = {
-	optional: ["skia", "QhzySharp"],
+	optional: ["skia", "QhzySharp", "server","cache"],
 };
+declare module "@koishijs/cache" {
+    interface Tables {
+        // 动态表名：包含房间号
+        // 这里我们将 Value 定义为 Song[]，因为 KTV 是一个歌曲列表
+        ktv_room: Song[];
+    }
+}
+
+interface Song {
+    id: string
+    title: string
+    url?: string
+}
+
+interface OpLog {
+    idArray: string[]
+    hash: string
+    song: Song
+    toIndex: number
+    timestamp: number
+}
 export let baseDir: string;
 export let assetsDir: string;
 export const starfxLogger: Logger = new Logger("starfx-bot");
@@ -755,6 +780,244 @@ export function apply(ctx: Context, cfg: Config) {
 			}
 		}
 	}
+
+    if (ctx.server) {
+        // // 预读模板文件
+        // const templatePath = path.resolve(__dirname,'./static/songRoom.ejs')
+        // const templateStr = fs.readFileSync(templatePath, 'utf-8')
+
+        // 缓存变量，按 roomId 分隔
+        const roomOpCache: Record<string, OpLog[]> = {}
+        const roomSongsCache: Record<string, Song[]> = {}
+
+        // 生成哈希工具函数
+        function getHash(ids: string[]) {
+            return crypto.createHash('md5').update(ids.join(',')).digest('hex')
+        }
+
+        // 每 5 分钟检测并清理 5 分钟前的缓存
+        ctx.setInterval(() => {
+            const now = Date.now();
+            for (const roomId in roomOpCache) {
+                roomOpCache[roomId] = roomOpCache[roomId].filter(log => now - log.timestamp < 5 * 60 * 1000);
+                if (roomOpCache[roomId].length === 0) delete roomOpCache[roomId];
+            }
+        }, 5 * 60 * 1000);
+
+
+        // 获取歌曲列表及当前哈希
+        ctx.server.get('/songRoom/api/:roomId', async (koaCtx) => {
+            const { roomId } = koaCtx.params;
+            const { lastHash: clientHash } = koaCtx.query; // 获取客户端传来的 Hash
+
+            if (!roomSongsCache[roomId]?.length){
+                roomSongsCache[roomId] = (await ctx.cache.get("ktv_room", roomId) || [])
+            }
+
+            const ids = roomSongsCache[roomId].map(s => s.id);
+            const serverHash = getHash(ids);
+
+            // 初始化缓存快照逻辑保持不变...
+            if (!roomOpCache[roomId]) {
+                roomOpCache[roomId] = [{ idArray: ids, hash: serverHash, song: null, toIndex: -1, timestamp: Date.now() }];
+            }
+
+            // --- 优化点：Hash 校验 ---
+            if (clientHash === serverHash) {
+                return koaCtx.body = { changed: false, hash: serverHash };
+            }
+
+            koaCtx.body = {
+                changed: true,
+                list: roomSongsCache[roomId],
+                hash: serverHash
+            };
+        });
+
+        // 核心 Move 逻辑
+        // 核心 Move/Add/Delete 逻辑
+        ctx.server.post('/songRoom/api/:roomId', async (koaCtx) => {
+            const { roomId } = koaCtx.params;
+            // 1. 获取请求体，强制定义为 Readonly 以防止在逻辑层意外修改原始请求数据
+            const body = koaCtx.request["body"] as {
+                idArrayHash: string,
+                song: Song,
+                toIndex: number
+            };
+
+            const { idArrayHash, song, toIndex } = body;
+
+            const logs = roomOpCache[roomId] || [];
+            const hitIdx = logs.findIndex(l => l.hash === idArrayHash);
+
+            // 如果 Hash 对不上，说明前端基于旧列表操作，拒绝并让前端回滚刷新
+            if (hitIdx === -1) return koaCtx.body = { success: false, code: 'REJECT' };
+
+            // 2. 准备数据快照
+            const baseLog = logs[hitIdx];
+            const spotIds = [...baseLog.idArray]; // 基础 ID 序列
+            const nowSongs = roomSongsCache[roomId] || [];
+
+            // 3. 将当前操作封存进日志流（注意：此时尚未执行，先入列）
+            const currentOp: OpLog = {
+                idArray: [], // 此时 finalIdArray 还没算出，后面补上
+                hash: '',
+                song: song,
+                toIndex: toIndex,
+                timestamp: Date.now()
+            };
+            // console.log(currentOp)
+            // 4. 获取当前 hit 之后的所有后续操作（包含当前这次）
+            const laterOps = [...logs.slice(hitIdx + 1), currentOp];
+
+            // 5. 执行链表运算：基于 hit 时的状态，重演后面所有的操作
+            const finalSongs = songOperation(nowSongs, spotIds, laterOps);
+            // console.log({ nowSongs, finalSongs })
+
+            // 6. 更新缓存与数据库
+            const finalIds = finalSongs.map(s => s.id);
+            const finalHash = getHash(finalIds);
+
+            // 完善 OpLog：记录本次操作后的最终状态，供下一个并发请求作为 base
+            currentOp.idArray = finalIds;
+            currentOp.hash = finalHash;
+            logs.push(currentOp);
+
+            // 更新内存缓存与持久化层
+            roomSongsCache[roomId] = finalSongs;
+            await ctx.cache.set(`ktv_room`, roomId, finalSongs);
+
+            koaCtx.body = { success: true, hash: finalHash };
+        });
+
+
+        function songOperation(nowSongs: Song[], songIdArray: string[], ops: OpLog[]): Song[] {
+            /*
+            实现逻辑：首先构造双向链表
+            HEAD <-> 0 <-> A <-> 1 <-> B <-> 2 <-> C <-> 3 <-> D <-> 4 <-> E <-> 5 <-> F <-> 6 <-> G <-> 7 <-> TAIL
+            对于接下来的Ops采用双向链表操作实现
+            op1: A -> 4
+            op2: B -> 6
+            ...
+            那么将很简单，让 A 的前后元素相连变为 0 <-> 1
+            然后把prev(4) <-> 4 改为 prev(4) <-> A <-> 4 ......
+            以此类推
+             */
+            // --- 第一步：构建最新的 Song 状态池 ---
+            // 无论是新增还是修改，OpLog 里的 song 总是代表该 ID 最新的元数据
+            const latestSongMap = new Map<string, Song>();
+
+            // 先存入当前已有的歌曲
+            nowSongs.forEach(s => latestSongMap.set(s.id, s));
+
+            // 用 OpLog 里的最新数据覆盖（按时间戳顺序处理）
+            ops.sort((a, b) => a.timestamp - b.timestamp).forEach(op => {
+                if (op.toIndex !== -1) { // 只要不是删除，就更新状态
+                    latestSongMap.set(op.song.id, op.song);
+                }
+            });
+
+            // --- 第二步：双向链表处理 ID 顺序 ---
+            class ListNode {
+                val: string | number;
+                prev: ListNode | null = null;
+                next: ListNode | null = null;
+                constructor(val: string | number) { this.val = val; }
+            }
+
+            const head = new ListNode('HEAD');
+            let current = head;
+            // 歌曲id -> 链表节点
+            const idNodes = new Map<string, ListNode>();
+            // 数字 -> 链表节点
+            const anchorNodes = new Map<number, ListNode>();
+
+            // 初始化原始链表
+            for (let i = 0; i <= songIdArray.length; i++) {
+                const anchorNode = new ListNode(i);
+                // 添加数字节点
+                anchorNodes.set(i, anchorNode);
+                current.next = anchorNode;
+                anchorNode.prev = current;
+                current = anchorNode;
+
+                if (i < songIdArray.length) {
+                    const id = songIdArray[i];
+                    const idNode = new ListNode(id);
+                    // 添加歌曲id节点
+                    idNodes.set(id, idNode);
+                    current.next = idNode;
+                    idNode.prev = current;
+                    current = idNode;
+                }
+            }
+
+            // 执行移动/增删逻辑
+            ops.forEach(op => {
+                const { song, toIndex } = op;
+                let node = idNodes.get(song.id);
+
+                // 1. 断开旧连接 (如果已存在)
+                if (node) {
+                    node.prev!.next = node.next;
+                    node.next!.prev = node.prev;
+                }
+
+                // 2. 如果是删除操作，直接移除引用并结束
+                if (toIndex === -1) {
+                    idNodes.delete(song.id);
+                    return;
+                }
+
+                // 3. 如果是新增，创建新节点
+                if (!node) {
+                    node = new ListNode(song.id);
+                    idNodes.set(song.id, node);
+                }
+
+                // 4. 挂载到指定的数字锚点前
+                const targetAnchor = anchorNodes.get(toIndex);
+                if (targetAnchor) {
+                    const before = targetAnchor.prev!;
+                    before.next = node;
+                    node.prev = before;
+                    node.next = targetAnchor;
+                    targetAnchor.prev = node;
+                }
+            });
+
+            // --- 第三步：转换回 Song 对象数组 ---
+            const result: Song[] = [];
+            let p = head.next;
+            while (p) {
+                if (typeof p.val === 'string' && p.val !== 'HEAD') {
+                    const latestSong = latestSongMap.get(p.val);
+                    if (latestSong) result.push(latestSong);
+                }
+                p = p.next;
+            }
+
+            return result;
+        }
+
+
+        // WebUI 托管
+        // 访问地址示例：http://localhost:5140/songRoom/12345
+        ctx.server.get('/songRoom/:roomId', async (koaCtx) => {
+            // 预读模板文件
+            const templatePath = path.resolve(__dirname, './static/songRoom.ejs')
+            const templateStr = fs.readFileSync(templatePath, 'utf-8')
+            const { roomId } = koaCtx.params
+            // 使用 EJS 渲染，并传入变量
+            const html = ejs.render(templateStr, {
+                roomId,
+                pageTitle: `KTV 房间 - ${roomId}`
+            })
+            koaCtx.type = 'html'
+            koaCtx.body = html
+        })
+
+    }
 
 	ctx.middleware(async (session, next) => {
 		const elements = session.elements;

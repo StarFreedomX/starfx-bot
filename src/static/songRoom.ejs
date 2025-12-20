@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= pageTitle %></title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuedraggable@4.1.0/dist/vuedraggable.umd.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        [v-cloak] { display: none; }
+        /* 列表平滑动画类名 */
+        .song-list-move {
+            transition: transform 0.4s cubic-bezier(0.2, 0, 0, 1);
+        }
+        .ghost-card {
+            opacity: 0.2;
+            background: #6366f1 !important;
+        }
+        .drag-handle { cursor: grab; }
+        .drag-handle:active { cursor: grabbing; }
+
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen p-4 sm:p-8 text-slate-900">
+<div id="app" class="max-w-md mx-auto" v-cloak>
+    <header class="mb-6 flex justify-between items-end">
+        <div>
+            <h1 class="text-3xl font-black text-indigo-600">KTV Queue</h1>
+            <p class="text-slate-400">房间: <%= roomId %></p>
+        </div>
+        <div class="text-[10px] text-slate-300 font-mono bg-slate-100 px-2 py-1 rounded">
+            HASH: {{ lastHash.slice(0,6) }}
+        </div>
+    </header>
+
+    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-6 space-y-3">
+        <input v-model="form.title" @keyup.enter="add" class="w-full px-4 py-2 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-400 transition" placeholder="歌曲名称">
+        <input v-model="form.url" @keyup.enter="add" class="w-full px-4 py-2 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-400 transition" placeholder="链接 (选填)">
+        <button @click="add" class="w-full py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 active:scale-95 transition shadow-lg shadow-indigo-100">
+            确认添加
+        </button>
+    </div>
+
+    <draggable
+            v-model="songs"
+            item-key="id"
+            handle=".drag-handle"
+            ghost-class="ghost-card"
+            :animation="300"
+            :component-data="{ name: 'song-list', type: 'transition' }"
+            @start="isDragging = true"
+            @change="onDragChange"
+    >
+        <template #item="{ element }">
+            <div class="bg-white mb-3 p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center group">
+                <div class="drag-handle p-2 mr-3 text-slate-300 hover:text-indigo-500 transition">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="font-bold text-slate-700 truncate">{{ element.title }}</div>
+                    <div class="text-xs text-slate-400 truncate">{{ element.url || '暂无链接' }}</div>
+                </div>
+                <button @click="remove(element)" class="ml-4 p-2 text-slate-200 hover:text-red-500 transition">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                </button>
+            </div>
+        </template>
+    </draggable>
+
+    <div v-if="songs.length === 0" class="text-center py-20 text-slate-300">
+        列表是空的
+    </div>
+</div>
+
+<script>
+    const { createApp, ref, onMounted, onUnmounted } = Vue
+    createApp({
+        components: { draggable: window.vuedraggable },
+        setup() {
+            const roomId = "<%= roomId %>"
+            const songs = ref([])
+            const lastHash = ref("")
+            const isDragging = ref(false)
+            const form = ref({ title: '', url: '' })
+
+            const commitOp = async (opData) => {
+                try {
+                    const res = await fetch(`/songRoom/api/${roomId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            idArrayHash: lastHash.value,
+                            ...opData
+                        })
+                    }).then(r => r.json())
+
+                    if (res.success) {
+                        // 【核心改进】
+                        // 服务器已成功处理并重演了所有操作，返回了最终一致的 Hash
+                        // 我们直接同步本地 Hash，这样下次 load 轮询时，
+                        // 携带这个新 Hash 访问后端，后端会因为 Hash 一致返回 changed: false
+                        lastHash.value = res.hash;
+                        return true;
+                    } else if (res.code === 'REJECT') {
+                        // 只有在彻底冲突（如异地同时删改）时，才强制重刷
+                        lastHash.value = "";
+                        await load();
+                    }
+                } catch (e) {
+                    console.error("API Error:", e);
+                    // 网络失败时，建议回滚或提示刷新，保证数据最终一致
+                    await load();
+                }
+                return false;
+            }
+
+            const load = async () => {
+                if (isDragging.value) return
+                try {
+                    // 将当前的 lastHash 作为参数传给后端
+                    const url = `/songRoom/api/${roomId}?lastHash=${lastHash.value}`;
+                    const res = await fetch(url).then(r => r.json())
+
+                    // 只有当后端明确告知数据已改变时，才更新列表
+                    if (res.changed) {
+                        songs.value = res.list
+                        lastHash.value = res.hash
+                    } else {
+                        // 如果后端返回 success 且 hash 一致，无需操作
+                        // 确保 lastHash 仍然同步（防抖/容错）
+                        if(res.hash) lastHash.value = res.hash
+                    }
+                } catch (e) {
+                    console.error("Load Error:", e)
+                }
+            }
+
+            const onDragChange = async (evt) => {
+                isDragging.value = false;
+                if (evt.moved) {
+                    const { element, newIndex, oldIndex } = evt.moved;
+                    // 修正向后移动时的标尺偏移
+                    let targetK = newIndex;
+                    if (newIndex > oldIndex) {
+                        targetK = newIndex + 1;
+                    }
+
+                    await commitOp({
+                        song: element,
+                        toIndex: targetK // 发送修正后的标尺
+                    });
+                }
+            }
+
+            // 处理添加歌曲
+            const add = async () => {
+                if(!form.value.title) return
+                const newSong = {
+                    id: 's-' + Math.random().toString(36).slice(2, 11),
+                    ...form.value
+                }
+                const currentLen = songs.value.length
+
+                // 乐观更新：本地先插入
+                songs.value.push(newSong)
+                form.value = { title: '', url: '' }
+
+                // 发送添加指令：插到当前数组末尾（数字标尺为当前长度）
+                const success = await commitOp({
+                    song: newSong,
+                    toIndex: currentLen
+                })
+                if (!success) await load()
+            }
+
+            // 处理删除歌曲
+            const remove = async (songObj) => {
+                // 乐观更新：本地先移除
+                songs.value = songs.value.filter(s => s.id !== songObj.id)
+
+                // 发送删除指令：toIndex 约定为 -1
+                await commitOp({
+                    song: songObj,
+                    toIndex: -1
+                })
+            }
+
+            let timer
+            onMounted(() => {
+                load()
+                // 每 3 秒同步一次数据
+                timer = setInterval(load, 3000)
+            })
+            onUnmounted(() => clearInterval(timer))
+
+            return { songs, form, add, remove, onDragChange, lastHash, isDragging }
+        }
+    }).mount('#app')
+</script>
+</body>
+</html>
