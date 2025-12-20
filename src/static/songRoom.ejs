@@ -9,18 +9,33 @@
     <script src="https://cdn.jsdelivr.net/npm/vuedraggable@4.1.0/dist/vuedraggable.umd.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        [v-cloak] { display: none; }
-        /* 列表平滑动画类名 */
+        /* 1. 保持拖拽时的平滑移动 (由 draggable 接管) */
         .song-list-move {
             transition: transform 0.4s cubic-bezier(0.2, 0, 0, 1);
         }
+
+        /* 2. 定义一个原生的 CSS 动画，用于“从无到有”的瞬间 */
+        @keyframes slideInFromRight {
+            from {
+                opacity: 0;
+                transform: translateX(50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* 3. 应用到列表项上 */
+        .song-card {
+            /* 当元素被加入 DOM 时自动触发 */
+            animation: slideInFromRight 0.5s cubic-bezier(0.2, 0, 0, 1) backwards;
+        }
+
         .ghost-card {
             opacity: 0.2;
             background: #6366f1 !important;
         }
-        .drag-handle { cursor: grab; }
-        .drag-handle:active { cursor: grabbing; }
-
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen p-4 sm:p-8 text-slate-900">
@@ -49,12 +64,12 @@
             handle=".drag-handle"
             ghost-class="ghost-card"
             :animation="300"
-            :component-data="{ name: 'song-list', type: 'transition' }"
             @start="isDragging = true"
+            @end="isDragging = false"
             @change="onDragChange"
     >
         <template #item="{ element }">
-            <div class="bg-white mb-3 p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center group">
+            <div :key="element.id" class="song-card bg-white mb-3 p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center group">
                 <div class="drag-handle p-2 mr-3 text-slate-300 hover:text-indigo-500 transition">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
                 </div>
@@ -117,23 +132,18 @@
             }
 
             const load = async () => {
-                if (isDragging.value) return
+                if (isDragging.value) return;
                 try {
-                    // 将当前的 lastHash 作为参数传给后端
                     const url = `/songRoom/api/${roomId}?lastHash=${lastHash.value}`;
-                    const res = await fetch(url).then(r => r.json())
+                    const res = await fetch(url).then(r => r.json());
 
-                    // 只有当后端明确告知数据已改变时，才更新列表
                     if (res.changed) {
-                        songs.value = res.list
-                        lastHash.value = res.hash
-                    } else {
-                        // 如果后端返回 success 且 hash 一致，无需操作
-                        // 确保 lastHash 仍然同步（防抖/容错）
-                        if(res.hash) lastHash.value = res.hash
+                        // 第一次载入时，所有 div 同时触发 @keyframes 动画
+                        songs.value = res.list;
+                        lastHash.value = res.hash;
                     }
                 } catch (e) {
-                    console.error("Load Error:", e)
+                    console.error("Load Error:", e);
                 }
             }
 
