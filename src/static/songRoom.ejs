@@ -19,23 +19,36 @@
             animation: slideInFromRight 0.5s cubic-bezier(0.2, 0, 0, 1) backwards;
         }
 
-        /* 离场动画 */
-        .slide-out-item {
-            /* 只针对删除相关的属性做过渡，不要写 transition: all */
-            transition: opacity 0.4s ease, margin 0.4s ease, padding 0.4s ease;
-            animation: slideOutToRight 0.4s cubic-bezier(0.2, 0, 0, 1) forwards;
-            pointer-events: none; /* 防止删除中被误操作 */
-        }
-
         @keyframes slideInFromRight {
             from { opacity: 0; transform: translateX(50px); }
             to { opacity: 1; transform: translateX(0); }
         }
 
+        /* 离场动画：只管滑出和透明度 */
+        .slide-out-item {
+            /* 重点：这里只管透明度和动画，不要在 keyframes 里写 margin */
+            animation: slideOutToRight 0.4s cubic-bezier(0.2, 0, 0, 1) forwards;
+
+            /* 关键：用 transition 平滑缩小高度，而不是用 animation */
+            transition: max-height 0.4s ease, margin 0.4s ease, padding 0.4s ease, opacity 0.4s ease;
+            max-height: 72px; /* 设一个比卡片实际高度略大的值 */
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        /* 当进入删除状态时，触发 transition 坍塌 */
+        .slide-out-item[is-deleting="true"] {
+            max-height: 0 !important;
+            margin-bottom: 0 !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            opacity: 0;
+            border: none;
+        }
+
         @keyframes slideOutToRight {
             from { opacity: 1; transform: translateX(0); }
-            to { opacity: 0; transform: translateX(100px);
-                margin-bottom: -80px; padding-top: 0; padding-bottom: 0; }
+            to { opacity: 0; transform: translateX(100px); }
         }
 
         .ghost-card { opacity: 0.2; background: #6366f1 !important; }
@@ -75,6 +88,7 @@
     >
         <template #item="{ element }">
             <div :key="element.id"
+                 :is-deleting="element.isDeleting ? 'true' : 'false'"
                  :class="['song-card bg-white mb-3 p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center group',
                  element.isNew ? 'slide-in-item' : '',
                  element.isDeleting ? 'slide-out-item' : '']">
@@ -149,7 +163,7 @@
                 return false;
             }
 
-// 2. 修改 add 函数，计算正确的 toIndex
+            // 2. 修改 add 函数，计算正确的 toIndex
             const add = async () => {
                 if(!form.value.title) return;
 
@@ -177,21 +191,56 @@
                 if (!success) await load();
             }
 
-// 3. 修改 remove 函数，实现先离场再删除
+            // 3. 修改 remove 函数，实现先离场再删除
             const remove = async (songObj) => {
-                // 第一步：打上删除标记触发 CSS 动画
-                songObj.isDeleting = true;
+                songObj.isDeleting = true; // 触发 CSS slide-out 和 max-height: 0
 
-                // 第二步：等待动画结束 (400ms) 再真正移除数据并请求后端
                 setTimeout(async () => {
-                    // 彻底从数组中过滤掉
+                    // 在 CSS 坍塌快完成时，直接剔除数据
                     songs.value = songs.value.filter(s => s.id !== songObj.id);
 
                     await commitOp({
                         song: songObj,
                         toIndex: -1
                     });
-                }, 400);
+                }, 400); // 略短于 400ms 的动画时间
+            }
+
+            // 获取最长递增子序列的索引下标
+            function getLISIndices(arr) {
+                const p = arr.slice();
+                const result = [0];
+                let i, j, u, v, c;
+                const len = arr.length;
+                for (i = 0; i < len; i++) {
+                    const arrI = arr[i];
+                    if (arrI !== -1) {
+                        j = result[result.length - 1];
+                        if (arr[j] < arrI) {
+                            p[i] = j;
+                            result.push(i);
+                            continue;
+                        }
+                        u = 0;
+                        v = result.length - 1;
+                        while (u < v) {
+                            c = (u + v) >> 1;
+                            if (arr[result[c]] < arrI) u = c + 1;
+                            else v = c;
+                        }
+                        if (arrI < arr[result[u]]) {
+                            if (u > 0) p[i] = result[u - 1];
+                            result[u] = i;
+                        }
+                    }
+                }
+                u = result.length;
+                v = result[u - 1];
+                while (u-- > 0) {
+                    result[u] = v;
+                    v = p[v];
+                }
+                return result;
             }
 
             // load 函数修改
@@ -202,21 +251,52 @@
                     const res = await fetch(url).then(r => r.json());
 
                     if (res.changed) {
-                        const newList = res.list.map(s => {
-                            const exists = songs.value.some(old => old.id === s.id);
-                            // 如果本地没有，或者是第一次刷新（songs.value 长度为 0），则设为 true
-                            return { ...s, isNew: !exists };
+                        const oldSongs = [...songs.value];
+                        const newSongsData = res.list;
+
+                        // 1. 建立旧 ID 映射
+                        const oldIdMap = new Map();
+                        oldSongs.forEach((s, i) => oldIdMap.set(s.id, i));
+
+                        // 2. 找到【即将被删除】的歌并标记动画
+                        const newIdSet = new Set(newSongsData.map(s => s.id));
+                        let hasRemoved = false;
+                        oldSongs.forEach(s => {
+                            if (!newIdSet.has(s.id) && !s.isDeleting) {
+                                s.isDeleting = true;
+                                hasRemoved = true;
+                            }
                         });
 
-                        songs.value = newList;
-                        lastHash.value = res.hash;
+                        // 如果有删除，先给 400ms 跑删除动画
+                        const syncDelay = hasRemoved ? 400 : 0;
 
-                        // 动画跑完后清理标记，确保拖拽时不再触发
                         setTimeout(() => {
-                            songs.value.forEach(s => s.isNew = false);
-                        }, 600);
+                            // 3. 计算 LIS 确定哪些元素保持相对顺序不动
+                            const source = newSongsData.map(s => oldIdMap.get(s.id) ?? -1);
+                            const lisIndices = new Set(getLISIndices(source));
+
+                            // 4. 构建最终列表并标记新元素
+                            const finalProcessedList = newSongsData.map((s, newIdx) => {
+                                const oldIdx = oldIdMap.get(s.id);
+                                const isNew = oldIdx === undefined;
+                                // 如果不是新歌，且不在 LIS 序列中，它会通过 draggable 的 move 动画移动
+                                return {
+                                    ...s,
+                                    isNew: isNew && oldSongs.length > 0 // 仅在非首次加载时标记入场
+                                };
+                            });
+
+                            songs.value = finalProcessedList;
+                            lastHash.value = res.hash;
+
+                            // 5. 清理入场标记
+                            setTimeout(() => {
+                                songs.value.forEach(s => s.isNew = false);
+                            }, 800);
+                        }, syncDelay);
                     }
-                } catch (e) { console.error(e); }
+                } catch (e) { console.error("Load Error:", e); }
             };
 
             const onDragChange = async (evt) => {
