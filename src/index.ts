@@ -852,12 +852,12 @@ export function apply(ctx: Context, cfg: Config) {
             // 如果 Hash 对不上，说明前端基于旧列表操作，拒绝并让前端回滚刷新
             if (hitIdx === -1) return koaCtx.body = { success: false, code: 'REJECT' };
 
-            // 2. 准备数据快照
+            // 准备数据快照
             const baseLog = logs[hitIdx];
             const spotIds = [...baseLog.idArray]; // 基础 ID 序列
             const nowSongs = roomSongsCache[roomId] || [];
 
-            // 3. 将当前操作封存进日志流（注意：此时尚未执行，先入列）
+            // 将当前操作封存进日志流（注意：此时尚未执行，先入列）
             const currentOp: OpLog = {
                 idArray: [], // 此时 finalIdArray 还没算出，后面补上
                 hash: '',
@@ -866,14 +866,14 @@ export function apply(ctx: Context, cfg: Config) {
                 timestamp: Date.now()
             };
             // console.log(currentOp)
-            // 4. 获取当前 hit 之后的所有后续操作（包含当前这次）
+            // 获取当前 hit 之后的所有后续操作（包含当前这次）
             const laterOps = [...logs.slice(hitIdx + 1), currentOp];
 
-            // 5. 执行链表运算：基于 hit 时的状态，重演后面所有的操作
+            // 执行链表运算：基于 hit 时的状态，重演后面所有的操作
             const finalSongs = songOperation(nowSongs, spotIds, laterOps);
             // console.log({ nowSongs, finalSongs })
 
-            // 6. 更新缓存与数据库
+            // 更新缓存与数据库
             const finalIds = finalSongs.map(s => s.id);
             const finalHash = getHash(finalIds);
 
