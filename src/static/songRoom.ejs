@@ -47,7 +47,7 @@
 
         /* 入场动画 */
         .slide-in-item {
-            animation: slideInFromRight 0.5s cubic-bezier(0.2, 0, 0, 1) backwards;
+            animation: slideInFromRight 0.4s cubic-bezier(0.2, 0, 0, 1) backwards;
         }
 
         @keyframes slideInFromRight {
@@ -61,8 +61,12 @@
             animation: slideOutToRight 0.4s cubic-bezier(0.2, 0, 0, 1) forwards;
 
             /* 关键：用 transition 平滑缩小高度，而不是用 animation */
-            transition: max-height 0.4s ease, margin 0.4s ease, padding 0.4s ease, opacity 0.4s ease;
-            max-height: 100px; /* 设一个比卡片实际高度略大的值 */
+            transition:
+                max-height 0.4s ease,
+                margin 0.4s ease,
+                padding 0.4s ease,
+                opacity 0.4s ease;
+            max-height: 100px;
             overflow: hidden;
             pointer-events: none;
         }
@@ -71,10 +75,15 @@
         .slide-out-item[is-deleting="true"] {
             max-height: 0 !important;
             margin-bottom: 0 !important;
+            margin-top: 0 !important;
             padding-top: 0 !important;
             padding-bottom: 0 !important;
             opacity: 0;
-            border: none;
+        }
+
+        .song-card:hover .font-bold {
+            color: #4f46e5; /* indigo-600 */
+            text-decoration: underline;
         }
 
         @keyframes slideOutToRight {
@@ -100,7 +109,7 @@
 
     <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-6 space-y-3">
         <input v-model="form.title" @keyup.enter="add" class="w-full px-4 py-2 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-400 transition" placeholder="歌曲名称">
-        <input v-model="form.url" @keyup.enter="add" class="w-full px-4 py-2 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-400 transition" placeholder="链接 (选填)">
+        <input v-model="form.url" @keyup.enter="add" class="w-full px-4 py-2 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-400 transition" placeholder="跳转链接 (必填)">
         <button @click="add" class="w-full py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 active:scale-95 transition shadow-lg shadow-indigo-100">
             确认添加
         </button>
@@ -119,23 +128,26 @@
     >
         <template #item="{ element }">
             <div :key="element.id"
-                 :class="['song-card bg-white mb-3 p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center group',
-                 element.isNew ? 'slide-in-item' : '',
-                 element.isDeleting ? 'slide-out-item' : '',
-                 element.isMoved ? 'highlight-change' : '',
-                 element.isAffected ? 'highlight-affected' : '']">
+                 @click="goToLink(element.url)"
+                 :is-deleting="element.isDeleting ? 'true' : 'false'"
+                 :class="['song-card bg-white mb-3 p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center group transition-all cursor-pointer hover:border-indigo-300 active:scale-[0.98]',
+                     element.isNew ? 'slide-in-item' : '',
+                     element.isDeleting ? 'slide-out-item' : '',
+                     element.isMoved ? 'highlight-change' : '',
+                     element.isAffected ? 'highlight-affected' : '']">
 
-
-                <div class="drag-handle p-2 mr-3 text-slate-300 hover:text-indigo-500 transition">
+                <div class="drag-handle p-2 mr-3 text-slate-300 hover:text-indigo-500 transition" @click.stop>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
                         <line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line>
                     </svg>
                 </div>
+
                 <div class="flex-1 min-w-0">
-                    <div class="font-bold text-slate-700 truncate">{{ element.title }}</div>
-                    <div class="text-xs text-slate-400 truncate">{{ element.url || '暂无链接' }}</div>
+                    <div class="font-bold text-slate-700 truncate group-hover:text-indigo-600 transition">{{ element.title }}</div>
+                    <div class="text-xs text-slate-400 truncate">{{ element.url }}</div>
                 </div>
-                <button @click="remove(element)" class="ml-4 p-2 text-slate-200 hover:text-red-500 transition">
+
+                <button @click.stop="remove(element)" class="ml-4 p-2 text-slate-200 hover:text-red-500 transition">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                         <polyline points="3 6 5 6 21 6"></polyline>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -198,14 +210,20 @@
 
             // 2. 修改 add 函数，计算正确的 toIndex
             const add = async () => {
-                if(!form.value.title) return;
+                let rawUrl = form.value.url.trim();
+                if(!form.value.title || !rawUrl) return;
+                // 自动补充协议头
+                if (!/^https?:\/\//i.test(rawUrl)) {
+                    rawUrl = 'https://' + rawUrl;
+                }
 
                 // 计算有效长度（排除正在删除的）
                 const effectiveLen = songs.value.filter(s => !s.isDeleting).length;
 
                 const newSong = {
                     id: 's-' + Math.random().toString(36).slice(2, 11),
-                    ...form.value,
+                    title: form.title,
+                    url: rawUrl,
                     isNew: true
                 };
 
@@ -236,7 +254,7 @@
                         song: songObj,
                         toIndex: -1
                     });
-                }, 400); // 略短于 400ms 的动画时间
+                }, 850); // 略短于 400ms 的动画时间
             }
 
             // 获取最长递增子序列的索引下标
@@ -327,6 +345,7 @@
                                 return {
                                     ...s,
                                     // 如果是真新歌，或者是我们刚才主动剔除的改动项，施加入场动画
+                                    isMoved: isActiveMove,
                                     isNew: (isNew || isActiveMove) && oldSongs.length > 0,
                                     isAffected: isAffected
                                 };
@@ -339,10 +358,19 @@
                                 songs.value.forEach(s => {
                                     s.isNew = s.isAffected = false;
                                 });
-                            }, 1000);
-                        }, 400); // 这里的 400ms 对应你 CSS 里 slide-out 的时间
+                            }, 600);
+                        }, 350); // 这里的 400ms 对应你 CSS 里 slide-out 的时间
                     }
                 } catch (e) { console.error("Load Error:", e); }
+            };
+
+            // 在 setup() 内部定义
+            const goToLink = (url) => {
+                if (url) {
+                    // 确保 URL 带有协议头
+                    const link = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+                    window.open(link, '_blank');
+                }
             };
 
             const onDragChange = async (evt) => {
@@ -372,7 +400,7 @@
             })
             onUnmounted(() => clearInterval(timer))
 
-            return { songs, form, add, remove, onDragChange, lastHash, isDragging }
+            return { songs, form, add, remove, onDragChange, lastHash, isDragging, goToLink }
         }
     }).mount('#app')
 </script>
