@@ -203,6 +203,29 @@
         </div>
     </div>
 
+    <div v-if="deletingSong" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-opacity">
+        <div class="bg-white w-full max-w-sm rounded-3xl shadow-2xl border border-slate-100 p-6 space-y-6 scale-in-center">
+            <div class="text-center">
+                <div class="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </div>
+                <h3 class="text-xl font-bold text-slate-800">确认删除？</h3>
+                <p class="text-slate-500 mt-2">歌曲 <span class="font-semibold text-slate-700">"{{ deletingSong.title }}"</span> 将被从队列中移除。</p>
+            </div>
+
+            <div class="flex space-x-3">
+                <button @click="deletingSong = null" class="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition">
+                    返回
+                </button>
+                <button @click="confirmDelete" class="flex-1 py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 shadow-lg shadow-red-100 transition">
+                    确认移除
+                </button>
+            </div>
+        </div>
+    </div>
+
 
     <div v-if="songs.length === 0" class="text-center py-20 text-slate-300">
         列表是空的
@@ -288,19 +311,33 @@
             }
 
             // 3. 修改 remove 函数，实现先离场再删除
-            const remove = async (songObj) => {
-                songObj.isDeleting = true; // 触发 CSS slide-out 和 max-height: 0
+            // 在 setup 内定义新变量
+            const deletingSong = ref(null);
+
+            // 第一步：点击垃圾桶图标，仅记录要删除的对象并显示弹窗
+            const remove = (songObj) => {
+                deletingSong.value = songObj;
+            };
+
+            // 第二步：用户在弹窗点击“确认移除”
+            const confirmDelete = async () => {
+                const songObj = deletingSong.value;
+                if (!songObj) return;
+
+                // 先关闭弹窗，确保动画视觉焦点回到列表
+                deletingSong.value = null;
+
+                // 执行你原本的平滑删除逻辑
+                songObj.isDeleting = true;
 
                 setTimeout(async () => {
-                    // 在 CSS 坍塌快完成时，直接剔除数据
                     songs.value = songs.value.filter(s => s.id !== songObj.id);
-
                     await commitOp({
                         song: songObj,
                         toIndex: -1
                     });
-                }, 850); // 略短于 400ms 的动画时间
-            }
+                }, 400); // 调整为 400ms 以匹配 CSS 坍塌速度
+            };
 
             // 获取最长递增子序列的索引下标
             function getLISIndices(arr) {
@@ -522,7 +559,7 @@
             })
             onUnmounted(() => clearInterval(timer))
 
-            return { songs, form, add, remove, onDragChange, lastHash, isDragging, goToLink, startEdit, saveEdit, editingSong, editForm, moveToTop }
+            return { songs, form, add, remove, onDragChange, lastHash, isDragging, goToLink, startEdit, saveEdit, editingSong, editForm, moveToTop, deletingSong, confirmDelete }
         }
     }).mount('#app')
 </script>
