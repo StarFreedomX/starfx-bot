@@ -1111,6 +1111,15 @@ export function apply(ctx: Context, cfg: Config) {
     </html>
     `;
         });
+
+        // 这段代码必须放在所有 ctx.server.get/post 逻辑的最下方
+        ctx.server.all('/songRoom/(.*)', async (koaCtx, next) => {
+            // 如果执行到了这里，说明前面的路由（如 /songRoom/:roomId）都没匹配上
+            // 直接返回 404 错误，不调用 next()
+            koaCtx.status = 404;
+            koaCtx.body = '404 Not Found - 路径错误';
+            // 不调用 next()，Koishi 的控制台逻辑就不会被触发
+        });
     }
 
 	ctx.middleware(async (session, next) => {
