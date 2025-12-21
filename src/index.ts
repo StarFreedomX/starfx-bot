@@ -812,10 +812,10 @@ export function apply(ctx: Context, cfg: Config) {
 
         // 获取歌曲列表及当前哈希
         // --- 修改 2：获取 API 逻辑 ---
-        ctx.server.get('/songRoom/:roomId/api/songListInfo', async (koaCtx) => {
-            const { roomId } = koaCtx.params;
-            const { lastHash: clientHash } = koaCtx.query;
-
+        ctx.server.get('/songRoom/api/songListInfo', async (koaCtx) => {
+            const { roomId: roomIds, lastHash: clientHashs } = koaCtx.query;
+            const roomId = Array.isArray(roomIds) ? roomIds.at(0) : roomIds;
+            const clientHash = Array.isArray(clientHashs) ? clientHashs.at(0) : clientHashs;
             // 1. 初始化歌曲缓存 (确保不是 undefined)
             if (!roomSongsCache[roomId]) {
                 const dbData = await ctx.cache.get("ktv_room", roomId);
@@ -849,8 +849,10 @@ export function apply(ctx: Context, cfg: Config) {
         });
 
         // 核心 Move/Add/Delete 逻辑
-        ctx.server.post('/songRoom/:roomId/api/songOperation', async (koaCtx) => {
-            const { roomId } = koaCtx.params;
+        ctx.server.post('/songRoom/api/songOperation', async (koaCtx) => {
+            const { roomId: roomIds} = koaCtx.query;
+            const roomId = Array.isArray(roomIds) ? roomIds.at(0) : roomIds;
+
             const body = koaCtx.request["body"];
             const { idArrayHash, song, toIndex } = body;
 
@@ -1031,11 +1033,20 @@ export function apply(ctx: Context, cfg: Config) {
         // WebUI 托管
         // 访问地址示例：http://localhost:5140/songRoom/12345
         ctx.server.get('/songRoom/:roomId', async (koaCtx) => {
-            // 预读模板文件
-            // const templatePath = path.resolve(__dirname, './static/songRoom.ejs')
-            if (process.env.NODE_ENV === "development")
+            if (process.env.NODE_ENV === "development") {
+                console.log('loading template')
+                const templatePath = path.resolve(__dirname, '../assets/songRoom.ejs')
                 templateStr = fs.readFileSync(templatePath, 'utf-8')
+            }
             const { roomId } = koaCtx.params
+            const urlPath = koaCtx.path;
+            // 检查路径末尾是否有斜杠
+            if (urlPath.endsWith('/')) {
+                koaCtx.status = 301;
+                // 加上斜杠并保留 query 参数（如 ?from=xxx）
+                koaCtx.redirect(urlPath.slice(0,-1) + koaCtx.search);
+                return;
+            }
             // 使用 EJS 渲染，并传入变量
             const html = ejs.render(templateStr, {
                 roomId,

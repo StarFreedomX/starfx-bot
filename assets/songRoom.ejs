@@ -63,28 +63,20 @@
 
         /* 离场动画：只管滑出和透明度 */
         .slide-out-item {
-            /* 重点：这里只管透明度和动画，不要在 keyframes 里写 margin */
             animation: slideOutToRight 0.4s cubic-bezier(0.2, 0, 0, 1) forwards;
-
-            /* 关键：用 transition 平滑缩小高度，而不是用 animation */
-            transition:
-                max-height 0.4s ease,
-                margin 0.4s ease,
-                padding 0.4s ease,
-                opacity 0.4s ease;
-            max-height: 100px;
+            transition: all 0.4s cubic-bezier(0.2, 0, 0, 1);
             overflow: hidden;
-            pointer-events: none;
         }
 
-        /* 当进入删除状态时，触发 transition 坍塌 */
+        /* 当进入删除状态时，高度坍塌 */
         .slide-out-item[is-deleting="true"] {
-            /*max-height: 0 !important;*/
+            max-height: 0 !important;
             margin-bottom: 0 !important;
             margin-top: 0 !important;
-            /*padding-top: 0 !important;*/
-            /*padding-bottom: 0 !important;*/
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
             opacity: 0;
+            border-width: 0;
         }
 
         .song-card:hover .font-bold {
@@ -157,7 +149,7 @@
     >
         <template #item="{ element }">
             <div :key="element.id"
-                 @click="goToLink(element.url)"
+                 @click="goToLink(element)"
                  :is-deleting="element.isDeleting ? 'true' : 'false'"
                  :class="['song-card bg-white mb-3 p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center group',
                  element.isNew ? 'slide-in-item' : '',
@@ -252,6 +244,32 @@
         </div>
     </transition>
 
+    <transition name="modal-fade">
+        <div v-if="pendingJumpUrl" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm" @click.self="pendingJumpUrl = null">
+            <div class="modal-container bg-white w-full max-w-sm rounded-3xl shadow-2xl border border-slate-100 p-6 space-y-6">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                            <polyline points="15 3 21 3 21 9"></polyline>
+                            <line x1="10" y1="14" x2="21" y2="3"></line>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-800">即将离开页面</h3>
+                    <p class="text-slate-500 mt-2 text-sm">确认要前往播放 <span class="font-semibold text-indigo-600">"{{ jumpSongTitle }}"</span> 吗？</p>
+                </div>
+                <div class="flex space-x-3">
+                    <button @click="pendingJumpUrl = null" class="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition">
+                        留在本页
+                    </button>
+                    <button @click="confirmJump" class="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition">
+                        立即前往
+                    </button>
+                </div>
+            </div>
+        </div>
+    </transition>
+
 
     <div v-if="songs.length === 0" class="text-center py-20 text-slate-300">
         列表是空的
@@ -269,6 +287,10 @@
             const lastHash = ref(EMPTY_HASH)
             const isDragging = ref(false)
             const form = ref({ title: '', url: '' })
+            const pendingJumpUrl = ref(null); // 存储待跳转的 URL
+            const jumpSongTitle = ref('');    // 存储待跳转的歌曲标题
+            const commitApiUrl = "api/songOperation"
+            const loadSongListUrl = "api/songListInfo"
 
             const commitOp = async (opData) => {
                 const cleanSong = opData.song ? { ...opData.song } : null;
@@ -278,7 +300,7 @@
                 }
 
                 try {
-                    const res = await fetch('api/songOperation', {
+                    const res = await fetch(`${commitApiUrl}?roomId=${roomId}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -406,7 +428,7 @@
             const load = async () => {
                 if (isDragging.value) return;
                 try {
-                    const url = `api/songListInfo?lastHash=${lastHash.value}`;
+                    const url = `${loadSongListUrl}?roomId=${roomId}&lastHash=${lastHash.value}`;
                     const res = await fetch(url).then(r => r.json());
 
                     if (res.changed) {
@@ -479,12 +501,18 @@
                 } catch (e) { console.error("Load Error:", e); }
             };
 
-            // 在 setup() 内部定义
-            const goToLink = (url) => {
-                if (url) {
-                    // 确保 URL 带有协议头
-                    const link = /^https?:\/\//i.test(url) ? url : `https://${url}`;
-                    window.open(link, '_blank');
+            const goToLink = (song) => {
+                if (song && song.url) {
+                    pendingJumpUrl.value = /^https?:\/\//i.test(song.url) ? song.url : `https://${song.url}`;
+                    jumpSongTitle.value = song.title;
+                }
+            };
+
+            // 新增执行跳转的函数
+            const confirmJump = () => {
+                if (pendingJumpUrl.value) {
+                    window.open(pendingJumpUrl.value, '_blank');
+                    pendingJumpUrl.value = null; // 关闭弹窗
                 }
             };
 
@@ -592,7 +620,11 @@
             })
             onUnmounted(() => clearInterval(timer))
 
-            return { songs, form, add, remove, onDragChange, lastHash, isDragging, goToLink, startEdit, saveEdit, editingSong, editForm, moveToTop, deletingSong, confirmDelete }
+            return { songs, form, add, remove, onDragChange,
+                lastHash, isDragging, goToLink, startEdit,
+                saveEdit, editingSong, editForm, moveToTop,
+                deletingSong, confirmDelete, pendingJumpUrl,
+                jumpSongTitle, confirmJump }
         }
     }).mount('#app')
 </script>
