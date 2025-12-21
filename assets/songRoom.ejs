@@ -265,21 +265,20 @@
         setup() {
             const roomId = "<%= roomId %>"
             const songs = ref([])
-            const lastHash = ref("")
+            const EMPTY_HASH = "EMPTY_LIST_HASH"; // 与后端 getHash 函数中的占位符一致
+            const lastHash = ref(EMPTY_HASH)
             const isDragging = ref(false)
             const form = ref({ title: '', url: '' })
 
-            // 1. 修改 commitOp，防止前端标记传给后端导致 500 错误
             const commitOp = async (opData) => {
                 const cleanSong = opData.song ? { ...opData.song } : null;
                 if (cleanSong) {
-                    // 剔除所有前端动画状态标记，防止后端校验失败或存储多余字段
                     const keysToRemove = ['isNew', 'isDeleting', 'isMoved', 'isAffected'];
                     keysToRemove.forEach(k => delete cleanSong[k]);
                 }
 
                 try {
-                    const res = await fetch(`/songRoom/api/${roomId}`, {
+                    const res = await fetch('api/songOperation', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -290,10 +289,11 @@
                     }).then(r => r.json());
 
                     if (res.success) {
-                        lastHash.value = res.hash; // 得到包含新 title/url 的新 Hash
+                        lastHash.value = res.hash;
                         return true;
                     } else if (res.code === 'REJECT') {
-                        lastHash.value = ""; // Hash 冲突，强制 load 最新数据
+                        // 如果被拒绝，说明前端 Hash 过时或列表已空但前端不知道
+                        lastHash.value = EMPTY_HASH; // 强制重置为初始状态
                         await load();
                     }
                 } catch (e) {
@@ -406,12 +406,19 @@
             const load = async () => {
                 if (isDragging.value) return;
                 try {
-                    const url = `/songRoom/api/${roomId}?lastHash=${lastHash.value}`;
+                    const url = `api/songListInfo?lastHash=${lastHash.value}`;
                     const res = await fetch(url).then(r => r.json());
 
                     if (res.changed) {
                         const oldSongs = [...songs.value];
-                        const newSongsData = res.list;
+                        const newSongsData = res.list || []; // 防御性处理空返回
+
+                        // 如果新数据就是空的，直接赋值并更新 Hash，跳过后续复杂的 LIS 计算
+                        if (newSongsData.length === 0) {
+                            songs.value = [];
+                            lastHash.value = res.hash || EMPTY_HASH;
+                            return;
+                        }
 
                         // 1. 计算 ID 映射
                         const oldIdMap = new Map();

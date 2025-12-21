@@ -118,6 +118,7 @@ export interface Config {
 	originImg: boolean;
 	originImgRSSUrl: string;
 	filePathToBase64: boolean;
+    ktvServer: boolean;
 
 	//功能控制
 	featureControl: Array<{
@@ -249,6 +250,7 @@ export const Config = Schema.intersect([
 		originImg: Schema.boolean()
 			.default(false)
 			.description("根据链接获取原图开关"),
+        ktvServer: Schema.boolean().default(false).description('开启ktv web服务器，访问地址是"<a href="/songRoom">koishi地址/songRoom</a>"')
 	}).description("自用功能"),
 	Schema.union([
 		Schema.object({
@@ -781,20 +783,21 @@ export function apply(ctx: Context, cfg: Config) {
 		}
 	}
 
-    if (ctx.server) {
-        // // 预读模板文件
-        // const templatePath = path.resolve(__dirname,'./static/songRoom.ejs')
-        // const templateStr = fs.readFileSync(templatePath, 'utf-8')
+    if (cfg.ktvServer && ctx.cache && ctx.server) {
+        // 预读模板文件
+        const templatePath = path.resolve(assetsDir,'./songRoom.ejs')
+        let templateStr = fs.readFileSync(templatePath, 'utf-8')
 
         // 缓存变量，按 roomId 分隔
         const roomOpCache: Record<string, OpLog[]> = {}
         const roomSongsCache: Record<string, Song[]> = {}
 
         // --- 修改 1：生成哈希工具函数 ---
-        function getHash(songs: Song[]) {
-            // 将 id, title, url 连成字符串。如果包含特殊字符，建议用 JSON.stringify
-            const content = songs.map(s => `${s.id}|${s.title}|${s.url}`).join(',');
-            return crypto.createHash('md5').update(content).digest('hex');
+        function getHash(songs) {
+            if (!songs || songs.length === 0) return "EMPTY_LIST_HASH"; // 给空列表一个固定标识
+            const str = songs.map(s => `${s.id}:${s.title}`).join('|');
+            // 使用你喜欢的哈希算法，如 md5
+            return crypto.createHash('md5').update(str).digest('hex');
         }
 
         // 每 5 分钟检测并清理 5 分钟前的缓存
@@ -809,21 +812,23 @@ export function apply(ctx: Context, cfg: Config) {
 
         // 获取歌曲列表及当前哈希
         // --- 修改 2：获取 API 逻辑 ---
-        ctx.server.get('/songRoom/api/:roomId', async (koaCtx) => {
+        ctx.server.get('/songRoom/:roomId/api/songListInfo', async (koaCtx) => {
             const { roomId } = koaCtx.params;
             const { lastHash: clientHash } = koaCtx.query;
 
-            if (!roomSongsCache[roomId]?.length){
-                roomSongsCache[roomId] = (await ctx.cache.get("ktv_room", roomId) || [])
+            // 1. 初始化歌曲缓存 (确保不是 undefined)
+            if (!roomSongsCache[roomId]) {
+                const dbData = await ctx.cache.get("ktv_room", roomId);
+                roomSongsCache[roomId] = dbData || [];
             }
 
-            // 传入整个 songs 数组而不是 ids
-            const serverHash = getHash(roomSongsCache[roomId]);
+            const currentSongs = roomSongsCache[roomId];
+            const serverHash = getHash(currentSongs);
 
-            if (!roomOpCache[roomId]) {
-                // OpLog 里的 idArray 建议也改为全量数据备份，或者至少在重演时能拿到内容
+            // 2. 初始化 OpLog 缓存 (重要：空列表也需要一个基础 Log 作为操作起点)
+            if (!roomOpCache[roomId] || roomOpCache[roomId].length === 0) {
                 roomOpCache[roomId] = [{
-                    idArray: roomSongsCache[roomId].map(s => s.id), // 顺序校验仍用 ID
+                    idArray: currentSongs.map(s => s.id),
                     hash: serverHash,
                     song: null,
                     toIndex: -1,
@@ -831,72 +836,85 @@ export function apply(ctx: Context, cfg: Config) {
                 }];
             }
 
-            if (clientHash === serverHash) {
+            // 3. 这里的对比要非常严格，clientHash 为空或不匹配时才下发全量
+            if (clientHash && clientHash === serverHash) {
                 return koaCtx.body = { changed: false, hash: serverHash };
             }
 
             koaCtx.body = {
                 changed: true,
-                list: roomSongsCache[roomId],
+                list: currentSongs,
                 hash: serverHash
             };
         });
 
         // 核心 Move/Add/Delete 逻辑
-        ctx.server.post('/songRoom/api/:roomId', async (koaCtx) => {
+        ctx.server.post('/songRoom/:roomId/api/songOperation', async (koaCtx) => {
             const { roomId } = koaCtx.params;
-            // 1. 获取请求体，强制定义为 Readonly 以防止在逻辑层意外修改原始请求数据
-            const body = koaCtx.request["body"] as {
-                idArrayHash: string,
-                song: Song,
-                toIndex: number
-            };
-
+            const body = koaCtx.request["body"];
             const { idArrayHash, song, toIndex } = body;
 
-            const logs = roomOpCache[roomId] || [];
+            // 确保缓存存在，防止服务器重启后第一个请求是 POST 导致报错
+            if (!roomSongsCache[roomId]) {
+                roomSongsCache[roomId] = (await ctx.cache.get("ktv_room", roomId) || []);
+            }
+
+            // 如果 OpLog 丢了，手动补一个基于当前内存状态的底座
+            if (!roomOpCache[roomId]) {
+                roomOpCache[roomId] = [{
+                    idArray: roomSongsCache[roomId].map(s => s.id),
+                    hash: getHash(roomSongsCache[roomId]),
+                    song: null,
+                    toIndex: -1,
+                    timestamp: Date.now()
+                }];
+            }
+
+            const logs = roomOpCache[roomId];
             const hitIdx = logs.findIndex(l => l.hash === idArrayHash);
 
-            // 如果 Hash 对不上，说明前端基于旧列表操作，拒绝并让前端回滚刷新
-            if (hitIdx === -1) return koaCtx.body = { success: false, code: 'REJECT' };
+            // REJECT 逻辑：如果前端传来的 Hash 在日志里找不到
+            // 可能是因为服务器重启导致 Log 丢失，或者前端落后太多
+            if (hitIdx === -1) {
+                return koaCtx.body = { success: false, code: 'REJECT' };
+            }
 
-            // 准备数据快照
             const baseLog = logs[hitIdx];
-            const spotIds = [...baseLog.idArray]; // 基础 ID 序列
-            const nowSongs = roomSongsCache[roomId] || [];
+            const spotIds = [...baseLog.idArray];
+            const nowSongs = [...roomSongsCache[roomId]]; // 浅拷贝一份防止污染
 
-            // 将当前操作封存进日志流（注意：此时尚未执行，先入列）
-            const currentOp: OpLog = {
-                idArray: [], // 此时 finalIdArray 还没算出，后面补上
+            const currentOp = {
+                idArray: [],
                 hash: '',
                 song: song,
                 toIndex: toIndex,
                 timestamp: Date.now()
             };
-            // console.log(currentOp)
-            // 获取当前 hit 之后的所有后续操作（包含当前这次）
+
             const laterOps = [...logs.slice(hitIdx + 1), currentOp];
 
-            // 执行链表运算：基于 hit 时的状态，重演后面所有的操作
-            const finalSongs = songOperation(nowSongs, spotIds, laterOps);
-            // console.log({ nowSongs, finalSongs })
+            try {
+                // 执行重演逻辑
+                const finalSongs = songOperation(nowSongs, spotIds, laterOps);
+                const finalIds = finalSongs.map(s => s.id);
+                const finalHash = getHash(finalSongs);
 
-            // 更新缓存与数据库
-            const finalIds = finalSongs.map(s => s.id);
-            const finalHash = getHash(finalSongs);
+                currentOp.idArray = finalIds;
+                currentOp.hash = finalHash;
+                logs.push(currentOp);
 
-            // 完善 OpLog：记录本次操作后的最终状态，供下一个并发请求作为 base
-            currentOp.idArray = finalIds;
-            currentOp.hash = finalHash;
-            logs.push(currentOp);
+                // 保持日志长度，防止内存溢出（只保留最近 50 条操作记录）
+                if (logs.length > 50) logs.shift();
 
-            // 更新内存缓存与持久化层
-            roomSongsCache[roomId] = finalSongs;
-            await ctx.cache.set(`ktv_room`, roomId, finalSongs);
+                roomSongsCache[roomId] = finalSongs;
+                await ctx.cache.set(`ktv_room`, roomId, finalSongs);
 
-            koaCtx.body = { success: true, hash: finalHash };
+                koaCtx.body = { success: true, hash: finalHash };
+            } catch (e) {
+                console.error("Operation re-run failed:", e);
+                koaCtx.body = { success: false, code: 'REJECT' };
+            }
         });
-
 
         function songOperation(nowSongs: Song[], songIdArray: string[], ops: OpLog[]): Song[] {
             // --- 第一步：构建最新的 Song 状态池 ---
@@ -1014,8 +1032,9 @@ export function apply(ctx: Context, cfg: Config) {
         // 访问地址示例：http://localhost:5140/songRoom/12345
         ctx.server.get('/songRoom/:roomId', async (koaCtx) => {
             // 预读模板文件
-            const templatePath = path.resolve(__dirname, './static/songRoom.ejs')
-            const templateStr = fs.readFileSync(templatePath, 'utf-8')
+            // const templatePath = path.resolve(__dirname, './static/songRoom.ejs')
+            if (process.env.NODE_ENV === "development")
+                templateStr = fs.readFileSync(templatePath, 'utf-8')
             const { roomId } = koaCtx.params
             // 使用 EJS 渲染，并传入变量
             const html = ejs.render(templateStr, {
@@ -1069,10 +1088,9 @@ export function apply(ctx: Context, cfg: Config) {
         <script>
             function joinRoom() {
                 const id = document.getElementById('roomInput').value.trim();
-                if (id) {
-                    window.location.href = \`/songRoom/\${id}\`;
-                }
+                if (id) window.location.href = id;
             }
+
             // 支持回车键跳转
             document.getElementById('roomInput').addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') joinRoom();
