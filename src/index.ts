@@ -788,6 +788,10 @@ export function apply(ctx: Context, cfg: Config) {
         const templatePath = path.resolve(assetsDir,'./songRoom.ejs')
         let templateStr = fs.readFileSync(templatePath, 'utf-8')
 
+        // 严格校验 roomId
+        const ROOM_ID_REGEX = /^[a-zA-Z0-9_-]{1,20}$/;
+        const CACHE_EXPIRE_TIME = 24 * 60 * 60 * 1000;
+
         // 缓存变量，按 roomId 分隔
         const roomOpCache: Record<string, OpLog[]> = {}
         const roomSongsCache: Record<string, Song[]> = {}
@@ -805,18 +809,20 @@ export function apply(ctx: Context, cfg: Config) {
             const now = Date.now();
             for (const roomId in roomOpCache) {
                 roomOpCache[roomId] = roomOpCache[roomId].filter(log => now - log.timestamp < 5 * 60 * 1000);
-                if (roomOpCache[roomId].length === 0) delete roomOpCache[roomId];
+                if (!roomOpCache[roomId]?.length) {
+                    delete roomOpCache[roomId];
+                    delete roomSongsCache[roomId];
+                }
             }
         }, 5 * 60 * 1000);
 
 
         // 获取歌曲列表及当前哈希
-        // --- 修改 2：获取 API 逻辑 ---
         ctx.server.get('/songRoom/api/songListInfo', async (koaCtx) => {
             const { roomId: roomIds, lastHash: clientHashs } = koaCtx.query;
             const roomId = Array.isArray(roomIds) ? roomIds.at(0) : roomIds;
             const clientHash = Array.isArray(clientHashs) ? clientHashs.at(0) : clientHashs;
-            // 1. 初始化歌曲缓存 (确保不是 undefined)
+            // 初始化歌曲缓存 (确保不是 undefined)
             if (!roomSongsCache[roomId]) {
                 const dbData = await ctx.cache.get("ktv_room", roomId);
                 roomSongsCache[roomId] = dbData || [];
@@ -825,7 +831,7 @@ export function apply(ctx: Context, cfg: Config) {
             const currentSongs = roomSongsCache[roomId];
             const serverHash = getHash(currentSongs);
 
-            // 2. 初始化 OpLog 缓存 (重要：空列表也需要一个基础 Log 作为操作起点)
+            // 初始化 OpLog 缓存 (重要：空列表也需要一个基础 Log 作为操作起点)
             if (!roomOpCache[roomId] || roomOpCache[roomId].length === 0) {
                 roomOpCache[roomId] = [{
                     idArray: currentSongs.map(s => s.id),
@@ -836,7 +842,7 @@ export function apply(ctx: Context, cfg: Config) {
                 }];
             }
 
-            // 3. 这里的对比要非常严格，clientHash 为空或不匹配时才下发全量
+            // clientHash 为空或不匹配时 下发全量
             if (clientHash && clientHash === serverHash) {
                 return koaCtx.body = { changed: false, hash: serverHash };
             }
@@ -848,13 +854,26 @@ export function apply(ctx: Context, cfg: Config) {
             };
         });
 
-        // 核心 Move/Add/Delete 逻辑
+        // Move/Add/Delete 逻辑
         ctx.server.post('/songRoom/api/songOperation', async (koaCtx) => {
             const { roomId: roomIds} = koaCtx.query;
             const roomId = Array.isArray(roomIds) ? roomIds.at(0) : roomIds;
-
+            if (!ROOM_ID_REGEX.test(roomId)) {
+                return koaCtx.body = { success: false, msg: 'Invalid Room ID' };
+            }
             const body = koaCtx.request["body"];
             const { idArrayHash, song, toIndex } = body;
+
+            if (song && song.url && song.url.includes('b23.tv')) {
+                const bvid = await resolveBilibiliBV(song.url);
+                if (bvid) {
+                    // 将 url 替换为提取出的 BV 号（或者完整的 bilibili:// 协议）
+                    // 这样存入缓存和下发给其他客户端时，就是最纯净的数据
+                    song.url = `bilibili://video/${bvid}`;
+                    // 如果你的 song 对象里有 id 字段，通常建议保持一致
+                    if (!song.id) song.id = bvid;
+                }
+            }
 
             // 确保缓存存在，防止服务器重启后第一个请求是 POST 导致报错
             if (!roomSongsCache[roomId]) {
@@ -909,17 +928,77 @@ export function apply(ctx: Context, cfg: Config) {
                 if (logs.length > 50) logs.shift();
 
                 roomSongsCache[roomId] = finalSongs;
-                await ctx.cache.set(`ktv_room`, roomId, finalSongs);
+                await ctx.cache.set(`ktv_room`, roomId, finalSongs, CACHE_EXPIRE_TIME);
 
-                koaCtx.body = { success: true, hash: finalHash };
+                koaCtx.body = { success: true, hash: finalHash, song };
             } catch (e) {
                 console.error("Operation re-run failed:", e);
                 koaCtx.body = { success: false, code: 'REJECT' };
             }
         });
 
+
+        resolveBilibiliBV("https://b23.tv/GYKSqTa").then((value)=>console.log(value))
+
+
+        /**
+         * 解析 B23.TV 短链接并提取 BV 号
+         * @param {string} inputUrl
+         * @returns {Promise<string|null>} 返回提取到的 BV 号
+         */
+        async function resolveBilibiliBV(inputUrl: string): Promise<string> {
+            // 基础校验：必须是 b23.tv 的链接
+            if (!inputUrl.includes('b23.tv')) {
+                // 如果输入已经是原始链接，直接尝试从输入提取
+                return extractBV(inputUrl);
+            }
+            try {
+                // 发起请求，禁止自动重定向
+                const response = await ctx.http(inputUrl, {
+                    redirect: 'manual',
+                    validateStatus: (status) => status >= 200 && status < 400,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/004.1'
+                    }
+                });
+
+                let targetUrl = response?.headers?.get('location');
+
+                return extractBV(targetUrl);
+
+            } catch (error) {
+                // 处理 axios 在 302 时可能抛出的异常
+                const loc = error.response?.headers?.location;
+                if (loc) return extractBV(loc);
+
+                console.error('解析 B23 短链接失败:', error.message);
+                return null;
+            }
+        }
+
+        /**
+         * 正则提取 BV 号
+         */
+        function extractBV(url: string) {
+            if (!url) return null;
+            const match = url.match(/(BV[a-zA-Z0-9]{10})/);
+            return match ? match[0] : null;
+        }
+
         function songOperation(nowSongs: Song[], songIdArray: string[], ops: OpLog[]): Song[] {
-            // --- 第一步：构建最新的 Song 状态池 ---
+            /*
+            实现逻辑：首先构造双向链表
+            HEAD <-> 0 <-> A <-> 1 <-> B <-> 2 <-> C <-> 3 <-> D <-> 4 <-> E <-> 5 <-> F <-> 6 <-> G <-> 7 <-> TAIL
+            对于接下来的Ops采用双向链表操作实现
+            op1: A -> 4
+            op2: B -> 6
+            ...
+            那么将很简单，让 A 的前后元素相连变为 0 <-> 1
+            然后把prev(4) <-> 4 改为 prev(4) <-> A <-> 4 ......
+            以此类推
+             */
+
+            // 构建最新的 Song 状态池
             const latestSongMap = new Map<string, Song>();
 
             // 初始数据判空
@@ -928,13 +1007,14 @@ export function apply(ctx: Context, cfg: Config) {
             }
 
             // 更新状态池，增加 op 和 song 的安全校验
-            [...ops].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0)).forEach(op => {
-                if (op?.song?.id && op.toIndex !== -1) {
-                    latestSongMap.set(op.song.id, op.song);
-                }
+            [...ops].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+                .forEach(op => {
+                    if (op?.song?.id && op.toIndex !== -1) {
+                        latestSongMap.set(op.song.id, op.song);
+                    }
             });
 
-            // --- 第二步：双向链表处理 ---
+            //双向链表处理
             class ListNode {
                 val: string | number;
                 prev: ListNode | null = null;
@@ -993,13 +1073,13 @@ export function apply(ctx: Context, cfg: Config) {
                     return;
                 }
 
-                // 3. 创建/重用节点
+                // 创建/重用节点
                 if (!node) {
                     node = new ListNode(song.id);
                     idNodes.set(song.id, node);
                 }
 
-                // 4. 安全挂载到锚点
+                // 安全挂载到锚点
                 const targetAnchor = anchorNodes.get(toIndex);
                 // 必须确保 targetAnchor 存在，且由于 HEAD 的存在，targetAnchor.prev 理论上不为空
                 if (targetAnchor && targetAnchor.prev) {
@@ -1013,7 +1093,7 @@ export function apply(ctx: Context, cfg: Config) {
                 }
             });
 
-            // --- 第三步：转换回数组 ---
+            // 转换回数组
             const result: Song[] = [];
             let p: ListNode | null = head.next;
 
@@ -1059,6 +1139,14 @@ export function apply(ctx: Context, cfg: Config) {
         // 默认入口页面：输入房间号
         ctx.server.get('/songRoom', async (koaCtx) => {
             koaCtx.type = 'html';
+            const urlPath = koaCtx.path;
+            // 检查路径末尾是否有斜杠
+            if (!urlPath.endsWith('/')) {
+                koaCtx.status = 301;
+                // 加上斜杠并保留 query 参数（如 ?from=xxx）
+                koaCtx.redirect(urlPath + '/' + koaCtx.search);
+                return;
+            }
             koaCtx.body = `
     <!DOCTYPE html>
     <html>
