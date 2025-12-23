@@ -1,8 +1,6 @@
 import * as fs from "node:fs";
 import path from "node:path";
 import type {} from "@ltxhhz/koishi-plugin-skia-canvas";
-import type {} from "@koishijs/plugin-server";
-import type {} from "@koishijs/cache";
 import type {} from "@quanhuzeyu/koishi-plugin-qhzy-sharp";
 import { type Context, h, Logger, Random, Schema } from "koishi";
 import mime from "mime-types";
@@ -11,11 +9,10 @@ import * as currency from "./plugins/currencySearch";
 import * as drawHead from "./plugins/drawHead";
 import * as getOriginImg from "./plugins/getOriginImg";
 import * as utils from "./utils";
-import { runKTVServer } from "./plugins/ktvServer";
 
 export const name = "starfx-bot";
 export const inject = {
-	optional: ["skia", "QhzySharp", "server","cache"],
+	optional: ["skia", "QhzySharp"],
 };
 
 export let baseDir: string;
@@ -97,7 +94,6 @@ export interface Config {
 	originImg: boolean;
 	originImgRSSUrl: string;
 	filePathToBase64: boolean;
-    ktvServer: boolean;
 
 	//功能控制
 	featureControl: Array<{
@@ -229,8 +225,7 @@ export const Config = Schema.intersect([
 		originImg: Schema.boolean()
 			.default(false)
 			.description("根据链接获取原图开关"),
-        ktvServer: Schema.boolean().default(false).description('开启ktv web服务器，访问地址是"<a href="/songRoom">koishi地址/songRoom</a>"')
-	}).description("自用功能"),
+        }).description("自用功能"),
 	Schema.union([
 		Schema.object({
 			originImg: Schema.const(true).required(),
@@ -762,16 +757,6 @@ export function apply(ctx: Context, cfg: Config) {
 		}
 	}
 
-    if (cfg.ktvServer && ctx.cache && ctx.server) {
-        runKTVServer(ctx,assetsDir)
-    }
-    ctx.server.all('/songRoom/(.*)', async (koaCtx, next) => {
-        // 如果执行到了这里，说明前面的路由（如 /songRoom/:roomId）都没匹配上
-        // 直接返回 404 错误，不调用 next()
-        koaCtx.status = 404;
-        koaCtx.body = '404 Not Found - 路径错误';
-        // 不调用 next()，Koishi 的控制台逻辑就不会被触发
-    });
 
 
 	ctx.middleware(async (session, next) => {
