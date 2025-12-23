@@ -335,6 +335,8 @@
             const lastHash = ref(EMPTY_HASH);
             const isDragging = ref(false);
             const deletingSong = ref(null);
+            const editingSong = ref(null);
+            const editForm = ref({ title: '', url: '' });
             const songs = ref([]);
             const form = ref({ title: '', url: '' })
             const pendingJumpUrl = ref(null); // 存储待跳转的 URL
@@ -349,10 +351,10 @@
             Vue.watch(autoJump, (val) => localStorage.setItem('ktv_auto_jump', val));
 
             const commitOp = async (opData) => {
-                const cleanSong = opData.song ? { ...opData.song } : null;
-                if (cleanSong) {
-                    const keysToRemove = ['isNew', 'isDeleting', 'isMoved', 'isAffected'];
-                    keysToRemove.forEach(k => delete cleanSong[k]);
+                let cleanSong = null;
+                if (opData.song) {
+                    const { id, title, url } = opData.song;
+                    cleanSong = { id, title, url };
                 }
 
                 try {
@@ -390,10 +392,6 @@
             const add = async () => {
                 let rawUrl = form.value.url.trim();
                 if(!form.value.title || !rawUrl) return;
-                // 自动补充协议头
-                if (!/^https?:\/\//i.test(rawUrl)) {
-                    rawUrl = 'https://' + rawUrl;
-                }
 
                 // 计算有效长度（排除正在删除的）
                 const effectiveLen = songs.value.filter(s => !s.isDeleting).length;
@@ -482,7 +480,6 @@
                 return result;
             }
 
-            // load 函数修改
             const load = async () => {
                 if (isDragging.value) return;
                 try {
@@ -491,7 +488,7 @@
 
                     if (res.changed) {
                         const oldSongs = [...songs.value];
-                        const newSongsData = res.list || []; // 防御性处理空返回
+                        const newSongsData = res.list || []; // 处理空返回
 
                         // 如果新数据就是空的，直接赋值并更新 Hash，跳过后续复杂的 LIS 计算
                         if (newSongsData.length === 0) {
@@ -500,11 +497,11 @@
                             return;
                         }
 
-                        // 1. 计算 ID 映射
+                        // 计算 ID 映射
                         const oldIdMap = new Map();
                         oldSongs.forEach((s, i) => { if (!s.isDeleting) oldIdMap.set(s.id, i); });
 
-                        // 2. 识别“主动移动”的 ID
+                        // 识别“主动移动”的 ID
                         const source = newSongsData.map(s => oldIdMap.has(s.id) ? oldIdMap.get(s.id) : -1);
                         const lisIndices = new Set(getLISIndices(source));
 
@@ -517,7 +514,7 @@
                             }
                         });
 
-                        // 3. 第一阶段：让删除项和“改动项”一起执行退出动画
+                        // 让删除项和“改动项”一起执行退出动画
                         const newIdSet = new Set(newSongsData.map(s => s.id));
                         oldSongs.forEach(s => {
                             // 如果是服务器删了，或者它是主动移动项，执行退出
@@ -526,7 +523,7 @@
                             }
                         });
 
-                        // 4. 第二阶段：等待退出动画完成
+                        // 等待退出动画完成
                         setTimeout(() => {
                             // 构建最终列表
                             songs.value = newSongsData.map((s, newIdx) => {
@@ -539,16 +536,16 @@
 
                                 return {
                                     ...s,
-                                    // 如果是真新歌，或者是我们刚才主动剔除的改动项，施加入场动画
+                                    // 入场动画
                                     isMoved: isActiveMove,
-                                    isNew: (isNew || isActiveMove) && oldSongs.length > 0,
+                                    isNew: (isNew || isActiveMove), //&& oldSongs.length > 0,
                                     isAffected: isAffected
                                 };
                             });
 
                             lastHash.value = res.hash;
 
-                            // 5. 第三阶段：清理状态
+                            // 清理状态
                             setTimeout(() => {
                                 songs.value.forEach(s => {
                                     s.isNew = s.isAffected = false;
@@ -615,9 +612,6 @@
                     });
                 }
             }
-
-            const editingSong = ref(null); // 存储当前正在编辑的对象引用
-            const editForm = ref({ title: '', url: '' });
 
             // 点击编辑按钮触发
             const startEdit = (song) => {
