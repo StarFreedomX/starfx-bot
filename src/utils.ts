@@ -473,8 +473,8 @@ function getPoints(session: Session, num: number, noodles: number) {
 	if (
 		!Number.isInteger(num) ||
 		!Number.isInteger(noodles) ||
-		num < 0 ||
-		noodles > 0
+		num <= 0 ||
+		noodles <= 0
 	)
 		return session.text(".invalid");
 	if (num > 20 || noodles > 100000000) return session.text(".too-many");
