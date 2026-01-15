@@ -4,7 +4,7 @@
   "contributors": [
     "StarFreedomX <starfreedomx@outlook.com>"
   ],
-  "version": "0.26.5",
+  "version": "0.26.6",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [

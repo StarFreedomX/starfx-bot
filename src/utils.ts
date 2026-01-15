@@ -424,7 +424,7 @@ export function handleRoll(session: Session) {
 			parts.push(element);
 		}
 	}
-	console.log(parts);
+	// console.log(parts);
 
 	// 移除第一个元素(通常是命令本身)
 	parts.shift();
