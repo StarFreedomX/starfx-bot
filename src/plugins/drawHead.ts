@@ -4,7 +4,7 @@ import type _sharp from "@quanhuzeyu/sharp-for-koishi";
 import type { Sharp } from "@quanhuzeyu/sharp-for-koishi";
 import { type Context, h } from "koishi";
 import { assetsDir, baseDir, starfxLogger } from "../index";
-import { getImageFromUrl } from "../utils";
+import { getImageFromUrl, getSharpConstructor } from "../utils";
 
 /**
  * 将options的参数转换为drawBanGDreamBorder的配置
@@ -162,7 +162,7 @@ export async function drawLock(ctx: Context, baseImage: string) {
 		}
 	}
 
-	const sharp: typeof _sharp = ctx.QhzySharp.Sharp;
+    const sharp: typeof _sharp = getSharpConstructor(ctx);
 	const imageMetadata = await image.metadata();
 	const lockUrl = `${baseDir}/data/starfx-bot/assets/lock.png`;
 	const size1 = Math.min(imageMetadata.width, imageMetadata.height);
@@ -192,7 +192,7 @@ export async function drawSold(ctx: Context, baseImage: string) {
 			console.error(error.message);
 		}
 	}
-	const sharp = ctx.QhzySharp.Sharp;
+    const sharp: typeof _sharp = getSharpConstructor(ctx);
 	const imageMetadata = await image.metadata();
 	const size1 = Math.min(imageMetadata.width, imageMetadata.height);
 	image.resize({ width: size1, height: size1, fit: "cover" });
@@ -282,7 +282,7 @@ export async function drawBanGDream(
 					path.join(assetsDir, "bangborder", `${options.border}.png`),
 				),
 			]);
-		const sharp: typeof _sharp = ctx.QhzySharp.Sharp;
+		const sharp: typeof _sharp = getSharpConstructor(ctx);
 		// avatar cover 500*zoom
 		let image = avatarSharp.resize(500 * zoom, 500 * zoom, { fit: "cover" });
 

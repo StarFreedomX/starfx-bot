@@ -244,8 +244,7 @@ export async function getImageFromUrl(
 ): Promise<Sharp> {
 	if (!url) throw new Error("URL must be provided");
 
-	// 获取 Sharp 构造函数
-	const sharp: typeof _sharp = ctx.QhzySharp.Sharp;
+    const sharp: typeof _sharp = getSharpConstructor(ctx);
 
 	try {
 		let input: ArrayBuffer | string;
@@ -588,4 +587,18 @@ export function ready(
 	return returnMessage;
 }
 
-// export async function test(url: string) {}
+/**
+ * 安全地从上下文中获取 Sharp 构造函数
+ */
+export function getSharpConstructor(ctx: Context) {
+    const raw = ctx.QhzySharp?.Sharp as any;
+    if (!raw) throw new Error("Sharp Service 尚未就绪");
+
+    const sharpConstructor = typeof raw === 'function' ? raw : raw.default;
+
+    if (typeof sharpConstructor !== 'function') {
+        throw new Error("无法获取 Sharp 构造函数，请尝试重启 Koishi 或检查 w-node 状态");
+    }
+    return sharpConstructor;
+}
+
