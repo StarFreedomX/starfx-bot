@@ -15,6 +15,12 @@ export const inject = {
 	optional: ["skia", "QhzySharp"],
 };
 
+declare module 'koishi' {
+    interface Channel {
+        pickupLength: number
+    }
+}
+
 export let baseDir: string;
 export let assetsDir: string;
 export const starfxLogger: Logger = new Logger("starfx-bot");
@@ -72,6 +78,8 @@ export interface Config {
 	forward: boolean;
 	searchExchangeRate: boolean;
 	intervalGetExchangeRate: boolean;
+    roomNumToName: boolean;
+    roomNumLength: number;
 
 	//回应
 	atNotSay: boolean;
@@ -163,6 +171,8 @@ export const Config = Schema.intersect([
 			.default(false)
 			.description("汇率定时推送功能")
 			.hidden(),
+        roomNumToName: Schema.boolean().default(false).description("监听车牌修改群名功能"),
+        roomNumLength: Schema.number().default(5).description("默认车牌位数")
 	}).description("指令小功能"),
 	Schema.object({
 		atNotSay: Schema.boolean()
@@ -251,6 +261,10 @@ export const Config = Schema.intersect([
 ]);
 
 export function apply(ctx: Context, cfg: Config) {
+    ctx.model.extend('channel', {
+        pickupLength: 'unsigned', // 无符号整数
+    });
+
 	ctx.i18n.define("zh-CN", require("./locales/zh-CN"));
 
 	baseDir = ctx.baseDir;
@@ -757,10 +771,99 @@ export function apply(ctx: Context, cfg: Config) {
 		}
 	}
 
+    if(cfg.roomNumToName){
+        ctx.command('打开拾取 [length:number]')
+            .alias('开启拾取', '设置拾取', '开启车牌检测')
+            .channelFields(['pickupLength'])
+            .action(async ({ session }, length) => {
+                if (!utils.detectControl(featureControl, session.guildId, "pickup")) return;
+                if (!session.guildId) return session.text(".noGuild");
+                if (!(await utils.canGrant(session))) return session.text(".noPermission");
+                const finalLength = length || cfg.roomNumLength || 5;
 
+                if (finalLength < 1 || finalLength > 20) return session.text(".invalidLength");
 
+                session.channel.pickupLength = finalLength;
+                return session.text(".success", { length: finalLength });
+            });
+
+        ctx.command('关闭拾取')
+            .channelFields(['pickupLength'])
+            .action(async ({ session }) => {
+                if (!utils.detectControl(featureControl, session.guildId, "pickup")) return;
+                if (!session.guildId) return session.text(".noGuild");
+                if (!(await utils.canGrant(session))) return session.text(".noPermission");
+                if (!(await utils.canBotManage(session))) return session.text("middleware.messages.notManager")
+                session.channel.pickupLength = 0;
+                return session.text(".success");
+            });
+
+        ctx.command('拾取状态')
+            .channelFields(['pickupLength'])
+            .action(async ({ session }) => {
+                if (!utils.detectControl(featureControl, session.guildId, "pickup")) return;
+                if (!session.guildId) return session.text(".noGuild");
+                if (!(await utils.canGrant(session))) return session.text(".noPermission");
+                if (!(await utils.canBotManage(session))) return session.text("middleware.messages.notManager")
+                return session.channel.pickupLength > 0 ? session.text(".enabled", { length: session.channel.pickupLength}) : session.text(".disabled");
+            })
+    }
 	ctx.middleware(async (session, next) => {
 		const elements = session.elements;
+        if (
+            cfg.roomNumToName && session.guildId &&
+            utils.detectControl(featureControl, session.guildId, "pickup")
+        ) {
+            const channel = await session.observeChannel(['pickupLength']);
+            const targetLength = channel.pickupLength;
+            const content = session.content?.trim();
+            // 如果未开启 (0) 或长度不匹配，直接跳过
+            if (targetLength > 0 && new RegExp(`^\\d{${targetLength}}$`).test(content)) {
+                if (!(await utils.canBotManage(session))) return session.text("middleware.messages.notManager")
+                const setGroupName = async (name: string) => {
+                    const internal = session.bot.internal as any;
+
+                    // 检查是否存在底层请求方法 _request
+                    if (typeof internal?._request === 'function' && session.platform === "onebot") {
+                        const response = await internal._request('set_group_name', {
+                            group_id: session.guildId,
+                            group_name: name,
+                        });
+                        if (response && response.retcode !== 0 && response.status !== 'ok') {
+                            throw new Error(`OneBot 报错 (Code: ${response.retcode}): ${JSON.stringify(response)}`);
+                        }
+                        return response;
+                    }
+
+                    if (internal.set_group_name) {
+                        return await internal.set_group_name(session.guildId, name);
+                    }
+
+                    if (session.bot.updateChannel){
+                        return await session.bot.updateChannel(session.guildId, { name });
+                    }
+
+                    throw new Error(session.text("middleware.messages.editFuncNotFound"));
+                };
+
+                try {
+                    await setGroupName(content);
+                    await session.send(session.text("middleware.messages.editGroupNameSuccess", { content }));
+                    return; // 拦截
+                } catch (e) {
+                    starfxLogger.warn(`纯数字修改失败，尝试添加空格重试: ${content}`);
+                    try {
+                        const spacedContent = content.replace(/(\d{3})(?=\d)/g, '$1 ');
+                        await setGroupName(spacedContent);
+                        await session.send(session.text("middleware.messages.editGroupNameRetrySuccess", { content, spacedContent }));
+                        return;
+                    } catch (retryError) {
+                        starfxLogger.error(`尝试添加空格修改群名依然失败: ${retryError}`);
+                    }
+                }
+            }
+        }
+
 		if (
 			cfg.openRepeat &&
 			utils.detectControl(featureControl, session.guildId, "repeat")

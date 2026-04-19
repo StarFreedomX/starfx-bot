@@ -32,6 +32,23 @@ commands:
       clearReady: '待机列表已清空'
       listReady: '当前待机{num}人: <br/>{list}'
       invalid: '输入无效'
+  打开拾取:
+    messages:
+      success: "已开启拾取\n当前拾取位数: {length}"
+      noPermission: '你没有权限打开拾取'
+      noGuild: '请在群聊中使用该指令'
+      invalidLength: '位数设定不合理，请输入 1-20 之间的数字'
+  关闭拾取:
+    messages:
+      success: '已关闭拾取'
+      noPermission: '你没有权限关闭拾取'
+      noGuild: '请在群聊中使用该指令'
+  拾取状态:
+    messages:
+      enabled: "拾取状态: 已打开\n当前拾取位数: {length}"
+      disabled: '拾取状态: 已关闭'
+      noPermission: '你没有权限查看拾取状态'
+      noGuild: '请在群聊中使用该指令'
 middleware:
   messages:
     atNotReply: '艾特我又不说话'
@@ -39,3 +56,7 @@ middleware:
     notBot: '我才不是机器人！'
     loveMessage: '我喜欢你'
     iLoveU: '我也喜欢你'
+    notManager: '当前bot没有管理员权限，无法修改群名'
+    editFuncNotFound: '无法找到设置群名的底层方法'
+    editGroupNameSuccess: '检测到车牌 {content}，群名修改成功！'
+    editGroupNameRetrySuccess: '检测到车牌 {content}，由于限制已修改为 "{spacedContent}"'

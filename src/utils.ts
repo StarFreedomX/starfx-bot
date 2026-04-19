@@ -602,3 +602,36 @@ export function getSharpConstructor(ctx: Context) {
     return sharpConstructor;
 }
 
+/**
+ * 检查用户权限
+ */
+export async function getAuthority(session: Session) {
+    // observe 数据库字段，确保 authority 属性被加载
+    const user = await session.observeUser(['authority']);
+    const authority = user?.authority || 0;
+
+    // 提取 roles 数组
+    const roles = (session.event.member?.roles || []).map(r =>
+        typeof r === 'string' ? r : r.id
+    );
+
+    return { authority, roles };
+}
+
+/**
+ * 专门检查机器人是否有权执行群管理操作
+ */
+export async function canBotManage(session: Session) {
+    try {
+        const selfMember = await session.bot.getGuildMember(session.guildId, session.selfId);
+        const roles = (selfMember.roles || []).map(r => typeof r === 'string' ? r : r.id);
+        return roles.includes('admin') || roles.includes('owner');
+    } catch (e) {
+        return false;
+    }
+}
+
+export async function canGrant(session: Session) {
+    const { authority, roles } = await getAuthority(session);
+    return authority > 1 || roles.includes('admin') || roles.includes('owner');
+}
