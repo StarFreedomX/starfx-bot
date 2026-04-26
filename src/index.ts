@@ -17,7 +17,8 @@ export const inject = {
 
 declare module 'koishi' {
     interface Channel {
-        pickupLength: number
+		pickupLength: number
+		pickupGrant: boolean
     }
 }
 
@@ -263,6 +264,7 @@ export const Config = Schema.intersect([
 export function apply(ctx: Context, cfg: Config) {
     ctx.model.extend('channel', {
         pickupLength: 'unsigned', // 无符号整数
+		pickupGrant: 'boolean',
     });
 
 	ctx.i18n.define("zh-CN", require("./locales/zh-CN"));
@@ -771,14 +773,47 @@ export function apply(ctx: Context, cfg: Config) {
 		}
 	}
 
+	const canTogglePickup = async (session: any) => {
+		if (await utils.canGrant(session)) return true;
+		const channel = await session.observeChannel(['pickupGrant']);
+		return !!channel.pickupGrant;
+	};
+
     if(cfg.roomNumToName){
-        ctx.command('打开拾取 [length:number]')
-            .alias('开启拾取', '设置拾取', '开启车牌检测')
-            .channelFields(['pickupLength'])
+		ctx.command('车牌检测权限 [allow:text]')
+			.channelFields(['pickupGrant'])
+			.action(async ({ session }, allow) => {
+				if (!utils.detectControl(featureControl, session.guildId, "pickup")) return;
+				if (!session.guildId) return session.text(".noGuild");
+				if (!(await utils.canGrant(session))) return session.text(".noPermission");
+
+				if (!allow) {
+					return session.channel.pickupGrant
+						? session.text(".status.enabled")
+						: session.text(".status.disabled");
+				}
+
+				const normalized = String(allow).trim().toLowerCase();
+				if (["1", "true", "yes", "y", "on", "开", "开启", "允许"].includes(normalized)) {
+					session.channel.pickupGrant = true;
+					return session.text(".enabled");
+				}
+				if (["0", "false", "no", "n", "off", "关", "关闭", "禁止"].includes(normalized)) {
+					session.channel.pickupGrant = false;
+					return session.text(".disabled");
+				}
+
+				return session.text(".invalid");
+			});
+
+        ctx.command('开启车牌检测 [length:number]')
+            .alias('打开车牌检测', '打开拾取',)
+            .channelFields(['pickupLength', 'pickupGrant'])
             .action(async ({ session }, length) => {
                 if (!utils.detectControl(featureControl, session.guildId, "pickup")) return;
                 if (!session.guildId) return session.text(".noGuild");
-                if (!(await utils.canGrant(session))) return session.text(".noPermission");
+                if (!(await canTogglePickup(session))) return session.text(".noPermission");
+                if (!(await utils.canBotManage(session))) return session.text("middleware.messages.notManager")
                 const finalLength = length || cfg.roomNumLength || 5;
 
                 if (finalLength < 1 || finalLength > 20) return session.text(".invalidLength");
@@ -787,25 +822,29 @@ export function apply(ctx: Context, cfg: Config) {
                 return session.text(".success", { length: finalLength });
             });
 
-        ctx.command('关闭拾取')
-            .channelFields(['pickupLength'])
+        ctx.command('关闭车牌检测')
+            .alias('关闭拾取')
+			.channelFields(['pickupLength', 'pickupGrant'])
             .action(async ({ session }) => {
                 if (!utils.detectControl(featureControl, session.guildId, "pickup")) return;
                 if (!session.guildId) return session.text(".noGuild");
-                if (!(await utils.canGrant(session))) return session.text(".noPermission");
-                if (!(await utils.canBotManage(session))) return session.text("middleware.messages.notManager")
+				if (!(await canTogglePickup(session))) return session.text(".noPermission");
                 session.channel.pickupLength = 0;
                 return session.text(".success");
             });
 
-        ctx.command('拾取状态')
-            .channelFields(['pickupLength'])
+        ctx.command('车牌检测状态')
+			.channelFields(['pickupLength', 'pickupGrant'])
             .action(async ({ session }) => {
                 if (!utils.detectControl(featureControl, session.guildId, "pickup")) return;
                 if (!session.guildId) return session.text(".noGuild");
-                if (!(await utils.canGrant(session))) return session.text(".noPermission");
-                if (!(await utils.canBotManage(session))) return session.text("middleware.messages.notManager")
-                return session.channel.pickupLength > 0 ? session.text(".enabled", { length: session.channel.pickupLength}) : session.text(".disabled");
+		        return `${session.channel.pickupLength > 0
+                    ? session.text(".enabled", { length: session.channel.pickupLength})
+                    : session.text(".disabled")
+                }\n${!!await utils.canBotManage(session)
+                    ? session.text('.managerEnabled')
+                    : session.text('.managerDisabled')
+                }`;
             })
     }
 	ctx.middleware(async (session, next) => {
@@ -814,7 +853,7 @@ export function apply(ctx: Context, cfg: Config) {
             cfg.roomNumToName && session.guildId &&
             utils.detectControl(featureControl, session.guildId, "pickup")
         ) {
-            const channel = await session.observeChannel(['pickupLength']);
+			const channel = await session.observeChannel(['pickupLength', 'pickupGrant']);
             const targetLength = channel.pickupLength;
             const content = session.content?.trim();
             // 如果未开启 (0) 或长度不匹配，直接跳过

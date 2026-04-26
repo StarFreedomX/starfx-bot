@@ -32,22 +32,34 @@ commands:
       clearReady: '待机列表已清空'
       listReady: '当前待机{num}人: <br/>{list}'
       invalid: '输入无效'
-  打开拾取:
+  开启车牌检测:
     messages:
-      success: "已开启拾取\n当前拾取位数: {length}"
-      noPermission: '你没有权限打开拾取'
+      success: "车牌检测：已打开\n当前车牌位数: {length}"
+      noPermission: '你没有权限开启车牌检测'
       noGuild: '请在群聊中使用该指令'
       invalidLength: '位数设定不合理，请输入 1-20 之间的数字'
-  关闭拾取:
+  关闭车牌检测:
     messages:
-      success: '已关闭拾取'
-      noPermission: '你没有权限关闭拾取'
+      success: '已关闭车牌检测'
+      noPermission: '你没有权限关闭车牌检测'
       noGuild: '请在群聊中使用该指令'
-  拾取状态:
+  车牌检测状态:
     messages:
-      enabled: "拾取状态: 已打开\n当前拾取位数: {length}"
-      disabled: '拾取状态: 已关闭'
-      noPermission: '你没有权限查看拾取状态'
+      enabled: "车牌检测: 已打开\n当前车牌位数: {length}"
+      disabled: '车牌检测: 已关闭'
+      managerEnabled: '管理员权限正常'
+      managerDisabled: '无管理员权限，无法修改群名'
+      noPermission: '你没有权限查看车牌检测状态'
+      noGuild: '请在群聊中使用该指令'
+  车牌检测权限:
+    messages:
+      status:
+        enabled: '普通群员开关车牌检测: 允许'
+        disabled: '普通群员开关车牌检测: 禁止'
+      enabled: '已允许普通群员开关车牌检测'
+      disabled: '已禁止普通群员开关车牌检测'
+      invalid: '无效输入，请输入 开 / 关'
+      noPermission: '你没有权限设置车牌检测权限'
       noGuild: '请在群聊中使用该指令'
 middleware:
   messages:
