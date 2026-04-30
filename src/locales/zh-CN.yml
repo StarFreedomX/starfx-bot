@@ -70,5 +70,5 @@ middleware:
     iLoveU: '我也喜欢你'
     notManager: '当前bot没有管理员权限，无法修改群名'
     editFuncNotFound: '无法找到设置群名的底层方法'
-    editGroupNameSuccess: '检测到车牌 {content}，群名修改成功！'
-    editGroupNameRetrySuccess: '检测到车牌 {content}，由于限制已修改为 "{spacedContent}"'
+    editGroupNameSuccess: '已修改群名: {content}'
+    editGroupNameRetrySuccess: '修改群名: "{content}"失败，由于限制已修改为: "{spacedContent}"'

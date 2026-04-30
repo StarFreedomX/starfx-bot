@@ -858,7 +858,7 @@ export function apply(ctx: Context, cfg: Config) {
             const content = session.content?.trim();
             // 如果未开启 (0) 或长度不匹配，直接跳过
             if (targetLength > 0 && new RegExp(`^\\d{${targetLength}}$`).test(content)) {
-                if (!(await utils.canBotManage(session))) return session.text("middleware.messages.notManager")
+                // if (!(await utils.canBotManage(session))) return session.text("middleware.messages.notManager")
                 const setGroupName = async (name: string) => {
                     const internal = session.bot.internal as any;
 
@@ -883,22 +883,74 @@ export function apply(ctx: Context, cfg: Config) {
                     }
 
                     throw new Error(session.text("middleware.messages.editFuncNotFound"));
+			    };
+
+                const getCurrentGroupName = async (): Promise<string | undefined> => {
+                    const channel = await session.bot.getChannel(session.channelId);
+                    return channel?.name;
                 };
 
-                try {
-                    await setGroupName(content);
-                    await session.send(session.text("middleware.messages.editGroupNameSuccess", { content }));
-                    return; // 拦截
-                } catch (e) {
-                    starfxLogger.warn(`纯数字修改失败，尝试添加空格重试: ${content}`);
-                    try {
-                        const spacedContent = content.replace(/(\d{3})(?=\d)/g, '$1 ');
-                        await setGroupName(spacedContent);
-                        await session.send(session.text("middleware.messages.editGroupNameRetrySuccess", { content, spacedContent }));
-                        return;
-                    } catch (retryError) {
-                        starfxLogger.error(`尝试添加空格修改群名依然失败: ${retryError}`);
-                    }
+			    try {
+					const replaceNumberInName = (name: string, digits: string) => {
+						if (!name || !name.length) return digits;
+						const targetLen = digits.replace(/\s+/g, '').length;
+						const n = name.length;
+						for (let i = 0; i < n; i++) {
+							for (let j = i + 1; j <= n; j++) {
+								const sub = name.slice(i, j);
+								const compact = sub.replace(/\s+/g, '');
+								if (compact.length === targetLen && /^\d+$/.test(compact)) {
+									return name.slice(0, i) + digits + name.slice(j);
+								}
+							}
+						}
+						// 未找到可替换的数字段，直接在前面添加（保留一个空格）
+						return digits + ' ' + name;
+					};
+
+					const currentName = await getCurrentGroupName();
+					const contentDigits = String(content).replace(/\s+/g, '');
+					let newName: string;
+					if (currentName) {
+						newName = replaceNumberInName(currentName, contentDigits);
+					} else {
+						newName = contentDigits;
+					}
+
+					await setGroupName(newName);
+					await session.send(session.text("middleware.messages.editGroupNameSuccess", { content: newName }));
+					return; // 拦截
+				} catch (e) {
+					// 如果直接替换失败，继续保留原有的“插入空格重试”策略
+					starfxLogger.warn(`纯数字修改失败，尝试添加空格重试: ${content}`);
+					try {
+						const spacedContent = content.replace(/(\d{3})(?=\d)/g, '$1 ');
+						// 再次尝试基于当前群名替换或直接设置
+						const currentName = await getCurrentGroupName();
+
+						const finalName = currentName
+							? ((() => {
+								  const targetLen = spacedContent.replace(/\s+/g, '').length;
+								  const n = currentName.length;
+								  for (let i = 0; i < n; i++) {
+									  for (let j = i + 1; j <= n; j++) {
+										  const sub = currentName.slice(i, j);
+										  const compact = sub.replace(/\s+/g, '');
+										  if (compact.length === targetLen && /^\d+$/.test(compact)) {
+											  return currentName.slice(0, i) + spacedContent + currentName.slice(j);
+										  }
+									  }
+								  }
+								  return spacedContent + ' ' + currentName;
+							  })())
+							: spacedContent;
+
+						await setGroupName(finalName);
+						await session.send(session.text("middleware.messages.editGroupNameRetrySuccess", { content, spacedContent: finalName }));
+						return;
+					} catch (retryError) {
+						starfxLogger.error(`尝试添加空格修改群名仍失败: ${retryError}`);
+					}
                 }
             }
         }
@@ -915,7 +967,7 @@ export function apply(ctx: Context, cfg: Config) {
 				repeatContextMap.set(session.gid, [content, 1]);
 			} else {
 				//两次消息相同
-				//times不为-1且times自加1之后大于设定的最小幅度次数
+				//times不为-1且times自加1之后大于设定的最小复读次数
 				//执行概率为repeatPossibility的随机布尔值
 				if (
 					ctxArr[1] !== -1 &&
@@ -953,7 +1005,7 @@ export function apply(ctx: Context, cfg: Config) {
 
 	if (process.env.NODE_ENV === "development") {
 		ctx.command("test [params]").action(async ({ session }) => {
-			await session.send("test");
+
 		});
 		ctx.middleware(async (session, next) => {
 			await session.send("");
