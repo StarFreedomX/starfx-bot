@@ -188,50 +188,62 @@ export async function getImageSrc(
 		quote?: boolean;
 	},
 ): Promise<string> {
-	const number = option?.number ?? true,
-		img = option?.img ?? true,
-		at = option?.at ?? true,
-		noParam = option?.noParam ?? true,
-		quote = option?.quote ?? true;
+    const { number = true, img = true, at = true, noParam = true, quote = true } = option ?? {};
 
-	//判断参数是不是纯数字或者没有参数
-	if (number && param?.length && /^\d+$/.test(param)) {
-		return `https://q1.qlogo.cn/g?b=qq&nk=${param}&s=640`;
-	} else if (noParam && !param?.length) {
-		return `https://q1.qlogo.cn/g?b=qq&nk=${session.userId}&s=640`;
-	}
+    // 参数与无参数前置判断
+    if (number && /^\d+$/.test(param)) {
+        const avatar = await getHeadUrlById(session, param);
+        if (avatar) return avatar;
+    }
+    // 无参数使用自己头像
+    if (noParam && !param?.length) {
+        const avatar = await getHeadUrlById(session, session.userId);
+        if (avatar) return avatar;
+    }
 
-	if (quote) {
-		//引用的消息中选择
-		const quoteElementArray = session?.quote?.elements;
-		if (quoteElementArray?.length) {
-			for (const element of quoteElementArray) {
-				if (img && element?.type === "img") {
-					//console.log(element?.attrs?.src.slice(0,1000))
-					return element?.attrs?.src;
-				} else if (
-					at &&
-					element?.type === "at" &&
-					element?.attrs?.id &&
-					element.attrs.id !== session.selfId
-				) {
-					return `https://q1.qlogo.cn/g?b=qq&nk=${element?.attrs?.id}&s=640`;
-				}
-			}
-		}
-	}
-	//发送的消息中选择
-	const elementArray = session.elements;
-	for (const element of elementArray) {
-		if (img && element?.type === "img") {
-			return element?.attrs?.src;
-		} else if (at && element?.type === "at" && element?.attrs?.id) {
-			return `https://q1.qlogo.cn/g?b=qq&nk=${element.attrs.id}&s=640`;
-		}
-	}
-	//没有那么返回空值
-	return "";
+    // Element 遍历函数
+    const findSrcInElements = async (elements: any[], skipSelfAt = false): Promise<string | null> => {
+        if (!elements?.length) return null;
+
+        // 过滤开头的机器人 at
+        let list = elements;
+        if (skipSelfAt) {
+            const startIdx = list.findIndex(el => !(el?.type === "at" && el?.attrs?.id === session.selfId));
+            list = startIdx === -1 ? [] : list.slice(startIdx);
+        }
+
+        for (const el of list) {
+            if (img && el?.type === "img" && el?.attrs?.src) {
+                return el.attrs.src;
+            }
+            if (at && el?.type === "at" && el?.attrs?.id && el.attrs.id !== session.selfId) {
+                const avatar = await getHeadUrlById(session, el.attrs.id);
+                if (avatar) return avatar;
+            }
+        }
+        return null;
+    };
+
+    if (quote) {
+        const avatar = await findSrcInElements(session?.quote?.elements);
+        if (avatar) return avatar;
+    }
+
+    return (await findSrcInElements(session?.elements, true)) ?? "";
 }
+
+async function getHeadUrlById(session: Session, id: string) {
+    switch (session.platform) {
+        case "onebot":
+            return `https://q1.qlogo.cn/g?b=qq&nk=${id}&s=640`;
+        case "qq":
+            return `https://thirdqq.qlogo.cn/qqapp/${session.selfId}/${id}/640`;
+        default:
+            return (await session.bot.getUser(id)).avatar || "";
+
+    }
+}
+
 /**
  * 从url下载图片或读取本地文件并返回sharp对象
  * @param ctx Context

@@ -382,7 +382,7 @@ export function apply(ctx: Context, cfg: Config) {
 
 	if (cfg.bangdreamBorder) {
 		ctx
-			.command("bdbd [param]")
+			.command("bdbd [param:text]")
 			.option("starNum", "-n <starNum: number>")
 			.option("color", "-c <color: string>")
 			.option("train", "-t <train: string>")
