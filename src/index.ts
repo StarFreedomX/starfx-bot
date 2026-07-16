@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import path from "node:path";
+import type {} from "@koishijs/plugin-server";
 import type {} from "@ltxhhz/koishi-plugin-skia-canvas";
 import type {} from "@quanhuzeyu/koishi-plugin-qhzy-sharp";
 import { type Context, h, Logger, Random, Schema } from "koishi";
@@ -12,14 +13,14 @@ import * as utils from "./utils";
 
 export const name = "starfx-bot";
 export const inject = {
-	optional: ["skia", "QhzySharp"],
+	optional: ["skia", "QhzySharp", "server"],
 };
 
-declare module 'koishi' {
-    interface Channel {
-		pickupLength: number
-		pickupGrant: boolean
-    }
+declare module "koishi" {
+	interface Channel {
+		pickupLength: number;
+		pickupGrant: boolean;
+	}
 }
 
 export let baseDir: string;
@@ -66,6 +67,9 @@ export interface Config {
 	tagWeight: number;
 	recordLink: recordLink;
 	saveArchive: boolean;
+	autoToken: boolean;
+	apiSecret: string;
+	ownerId: string;
 
 	//指令小功能
 	roll: boolean;
@@ -79,8 +83,8 @@ export interface Config {
 	forward: boolean;
 	searchExchangeRate: boolean;
 	intervalGetExchangeRate: boolean;
-    roomNumToName: boolean;
-    roomNumLength: number;
+	roomNumToName: boolean;
+	roomNumLength: number;
 
 	//回应
 	atNotSay: boolean;
@@ -112,7 +116,7 @@ export interface Config {
 	}>;
 }
 
-export const Config = Schema.intersect([
+export const Config: Schema = Schema.intersect([
 	Schema.object({
 		openLock: Schema.boolean()
 			.default(true)
@@ -146,6 +150,15 @@ export const Config = Schema.intersect([
 			.hidden(),
 	}).description("语录记录功能"),
 	Schema.object({
+		autoToken: Schema.boolean()
+			.default(false)
+			.description("开启自动获取 Token 功能（配合 image-tag-editor-web 使用）"),
+		apiSecret: Schema.string().description("Web 端调用 Bot API 的共享密钥"),
+		ownerId: Schema.string().description(
+			"owner 的用户 ID（自动获得 owner 权限）",
+		),
+	}).description("Token 自动获取"),
+	Schema.object({
 		roll: Schema.boolean().default(true).description("开启roll随机数功能"),
 		undo: Schema.boolean()
 			.default(true)
@@ -172,8 +185,10 @@ export const Config = Schema.intersect([
 			.default(false)
 			.description("汇率定时推送功能")
 			.hidden(),
-        roomNumToName: Schema.boolean().default(false).description("监听车牌修改群名功能"),
-        roomNumLength: Schema.number().default(5).description("默认车牌位数")
+		roomNumToName: Schema.boolean()
+			.default(false)
+			.description("监听车牌修改群名功能"),
+		roomNumLength: Schema.number().default(5).description("默认车牌位数"),
 	}).description("指令小功能"),
 	Schema.object({
 		atNotSay: Schema.boolean()
@@ -236,7 +251,7 @@ export const Config = Schema.intersect([
 		originImg: Schema.boolean()
 			.default(false)
 			.description("根据链接获取原图开关"),
-        }).description("自用功能"),
+	}).description("自用功能"),
 	Schema.union([
 		Schema.object({
 			originImg: Schema.const(true).required(),
@@ -262,10 +277,10 @@ export const Config = Schema.intersect([
 ]);
 
 export function apply(ctx: Context, cfg: Config) {
-    ctx.model.extend('channel', {
-        pickupLength: 'unsigned', // 无符号整数
-		pickupGrant: 'boolean',
-    });
+	ctx.model.extend("channel", {
+		pickupLength: "unsigned", // 无符号整数
+		pickupGrant: "boolean",
+	});
 
 	ctx.i18n.define("zh-CN", require("./locales/zh-CN"));
 
@@ -275,7 +290,7 @@ export function apply(ctx: Context, cfg: Config) {
 	initAssets();
 	// write your plugin here
 
-	let featureControl = utils.parseFeatureControl(cfg.featureControl);
+	const featureControl = utils.parseFeatureControl(cfg.featureControl);
 
 	if (cfg.openLock) {
 		ctx.command("封印 [param]").action(async ({ session }, param) => {
@@ -407,6 +422,9 @@ export function apply(ctx: Context, cfg: Config) {
 	}
 
 	if (cfg.record) {
+		const { info: logRecord } = cfg.autoToken
+			? require("./plugins/logService")
+			: { info: () => {} };
 		ctx.command("投稿 [param]").action(async ({ session }, param) => {
 			if (
 				utils.detectControl(featureControl, session.guildId, "record") &&
@@ -422,11 +440,12 @@ export function apply(ctx: Context, cfg: Config) {
 				if (!imageSrc) {
 					return "请发送带图片的指令消息或引用图片消息进行投稿";
 				}
-				return await utils.addRecord(
-					ctx,
-					session.gid.replaceAll(":", "_"),
-					imageSrc,
+				const groupFolder = session.gid.replaceAll(":", "_");
+				const result = await utils.addRecord(ctx, groupFolder, imageSrc);
+				logRecord(
+					`[投稿] ${session.username || session.userId}(${session.userId}) group=${session.gid}`,
 				);
+				return result;
 			}
 		});
 		ctx.command("语录 [tag:string]").action(async ({ session }, tag) => {
@@ -444,6 +463,14 @@ export function apply(ctx: Context, cfg: Config) {
 				await session.send(h.image(filepath));
 			}
 		});
+	}
+
+	if (cfg.autoToken && cfg.apiSecret) {
+		const { VerifyService } = require("./plugins/verifyService");
+		const { runRecordApi } = require("./plugins/recordApi");
+		const verifyService = new VerifyService(ctx, cfg, cfg.ownerId);
+		verifyService.start();
+		runRecordApi(ctx, cfg, verifyService);
 	}
 
 	for (const key in cfg.sendLocalImage) {
@@ -775,17 +802,20 @@ export function apply(ctx: Context, cfg: Config) {
 
 	const canTogglePickup = async (session: any) => {
 		if (await utils.canGrant(session)) return true;
-		const channel = await session.observeChannel(['pickupGrant']);
+		const channel = await session.observeChannel(["pickupGrant"]);
 		return !!channel.pickupGrant;
 	};
 
-    if(cfg.roomNumToName){
-		ctx.command('车牌检测权限 [allow:text]')
-			.channelFields(['pickupGrant'])
+	if (cfg.roomNumToName) {
+		ctx
+			.command("车牌检测权限 [allow:text]")
+			.channelFields(["pickupGrant"])
 			.action(async ({ session }, allow) => {
-				if (!utils.detectControl(featureControl, session.guildId, "pickup")) return;
+				if (!utils.detectControl(featureControl, session.guildId, "pickup"))
+					return;
 				if (!session.guildId) return session.text(".noGuild");
-				if (!(await utils.canGrant(session))) return session.text(".noPermission");
+				if (!(await utils.canGrant(session)))
+					return session.text(".noPermission");
 
 				if (!allow) {
 					return session.channel.pickupGrant
@@ -794,11 +824,19 @@ export function apply(ctx: Context, cfg: Config) {
 				}
 
 				const normalized = String(allow).trim().toLowerCase();
-				if (["1", "true", "yes", "y", "on", "开", "开启", "允许"].includes(normalized)) {
+				if (
+					["1", "true", "yes", "y", "on", "开", "开启", "允许"].includes(
+						normalized,
+					)
+				) {
 					session.channel.pickupGrant = true;
 					return session.text(".enabled");
 				}
-				if (["0", "false", "no", "n", "off", "关", "关闭", "禁止"].includes(normalized)) {
+				if (
+					["0", "false", "no", "n", "off", "关", "关闭", "禁止"].includes(
+						normalized,
+					)
+				) {
 					session.channel.pickupGrant = false;
 					return session.text(".disabled");
 				}
@@ -806,110 +844,138 @@ export function apply(ctx: Context, cfg: Config) {
 				return session.text(".invalid");
 			});
 
-        ctx.command('开启车牌检测 [length:number]')
-            .alias('打开车牌检测', '打开拾取',)
-            .channelFields(['pickupLength', 'pickupGrant'])
-            .action(async ({ session }, length) => {
-                if (!utils.detectControl(featureControl, session.guildId, "pickup")) return;
-                if (!session.guildId) return session.text(".noGuild");
-                if (!(await canTogglePickup(session))) return session.text(".noPermission");
-                if (!(await utils.canBotManage(session))) return session.text("middleware.messages.notManager")
-                const finalLength = length || cfg.roomNumLength || 5;
+		ctx
+			.command("开启车牌检测 [length:number]")
+			.alias("打开车牌检测", "打开拾取")
+			.channelFields(["pickupLength", "pickupGrant"])
+			.action(async ({ session }, length) => {
+				if (!utils.detectControl(featureControl, session.guildId, "pickup"))
+					return;
+				if (!session.guildId) return session.text(".noGuild");
+				if (!(await canTogglePickup(session)))
+					return session.text(".noPermission");
+				if (!(await utils.canBotManage(session)))
+					return session.text("middleware.messages.notManager");
+				const finalLength = length || cfg.roomNumLength || 5;
 
-                if (finalLength < 1 || finalLength > 20) return session.text(".invalidLength");
+				if (finalLength < 1 || finalLength > 20)
+					return session.text(".invalidLength");
 
-                session.channel.pickupLength = finalLength;
-                return session.text(".success", { length: finalLength });
-            });
+				session.channel.pickupLength = finalLength;
+				return session.text(".success", { length: finalLength });
+			});
 
-        ctx.command('关闭车牌检测')
-            .alias('关闭拾取')
-			.channelFields(['pickupLength', 'pickupGrant'])
-            .action(async ({ session }) => {
-                if (!utils.detectControl(featureControl, session.guildId, "pickup")) return;
-                if (!session.guildId) return session.text(".noGuild");
-				if (!(await canTogglePickup(session))) return session.text(".noPermission");
-                session.channel.pickupLength = 0;
-                return session.text(".success");
-            });
+		ctx
+			.command("关闭车牌检测")
+			.alias("关闭拾取")
+			.channelFields(["pickupLength", "pickupGrant"])
+			.action(async ({ session }) => {
+				if (!utils.detectControl(featureControl, session.guildId, "pickup"))
+					return;
+				if (!session.guildId) return session.text(".noGuild");
+				if (!(await canTogglePickup(session)))
+					return session.text(".noPermission");
+				session.channel.pickupLength = 0;
+				return session.text(".success");
+			});
 
-        ctx.command('车牌检测状态')
-			.channelFields(['pickupLength', 'pickupGrant'])
-            .action(async ({ session }) => {
-                if (!utils.detectControl(featureControl, session.guildId, "pickup")) return;
-                if (!session.guildId) return session.text(".noGuild");
-		        return `${session.channel.pickupLength > 0
-                    ? session.text(".enabled", { length: session.channel.pickupLength})
-                    : session.text(".disabled")
-                }\n${!!await utils.canBotManage(session)
-                    ? session.text('.managerEnabled')
-                    : session.text('.managerDisabled')
-                }`;
-            })
-    }
+		ctx
+			.command("车牌检测状态")
+			.channelFields(["pickupLength", "pickupGrant"])
+			.action(async ({ session }) => {
+				if (!utils.detectControl(featureControl, session.guildId, "pickup"))
+					return;
+				if (!session.guildId) return session.text(".noGuild");
+				return `${
+					session.channel.pickupLength > 0
+						? session.text(".enabled", { length: session.channel.pickupLength })
+						: session.text(".disabled")
+				}\n${
+					(await utils.canBotManage(session))
+						? session.text(".managerEnabled")
+						: session.text(".managerDisabled")
+				}`;
+			});
+	}
 	ctx.middleware(async (session, next) => {
 		const elements = session.elements;
-        if (
-            cfg.roomNumToName && session.guildId &&
-            utils.detectControl(featureControl, session.guildId, "pickup")
-        ) {
-			const channel = await session.observeChannel(['pickupLength', 'pickupGrant']);
-            const targetLength = channel.pickupLength;
-            const content = session.content?.trim();
-            // 如果未开启 (0) 或长度不匹配，直接跳过
-            if (targetLength > 0 && new RegExp(`^\\d{${targetLength}}$`).test(content)) {
-                // if (!(await utils.canBotManage(session))) return session.text("middleware.messages.notManager")
-                const setGroupName = async (name: string) => {
-                    const internal = session.bot.internal as any;
+		if (
+			cfg.roomNumToName &&
+			session.guildId &&
+			utils.detectControl(featureControl, session.guildId, "pickup")
+		) {
+			const channel = await session.observeChannel([
+				"pickupLength",
+				"pickupGrant",
+			]);
+			const targetLength = channel.pickupLength;
+			const content = session.content?.trim();
+			// 如果未开启 (0) 或长度不匹配，直接跳过
+			if (
+				targetLength > 0 &&
+				new RegExp(`^\\d{${targetLength}}$`).test(content)
+			) {
+				// if (!(await utils.canBotManage(session))) return session.text("middleware.messages.notManager")
+				const setGroupName = async (name: string) => {
+					const internal = session.bot.internal as any;
 
-                    // 检查是否存在底层请求方法 _request
-                    if (typeof internal?._request === 'function' && session.platform === "onebot") {
-                        const response = await internal._request('set_group_name', {
-                            group_id: session.guildId,
-                            group_name: name,
-                        });
-                        if (response && response.retcode !== 0 && response.status !== 'ok') {
-                            throw new Error(`OneBot 报错 (Code: ${response.retcode}): ${JSON.stringify(response)}`);
-                        }
-                        return response;
-                    }
+					// 检查是否存在底层请求方法 _request
+					if (
+						typeof internal?._request === "function" &&
+						session.platform === "onebot"
+					) {
+						const response = await internal._request("set_group_name", {
+							group_id: session.guildId,
+							group_name: name,
+						});
+						if (
+							response &&
+							response.retcode !== 0 &&
+							response.status !== "ok"
+						) {
+							throw new Error(
+								`OneBot 报错 (Code: ${response.retcode}): ${JSON.stringify(response)}`,
+							);
+						}
+						return response;
+					}
 
-                    if (internal.set_group_name) {
-                        return await internal.set_group_name(session.guildId, name);
-                    }
+					if (internal.set_group_name) {
+						return await internal.set_group_name(session.guildId, name);
+					}
 
-                    if (session.bot.updateChannel){
-                        return await session.bot.updateChannel(session.guildId, { name });
-                    }
+					if (session.bot.updateChannel) {
+						return await session.bot.updateChannel(session.guildId, { name });
+					}
 
-                    throw new Error(session.text("middleware.messages.editFuncNotFound"));
-			    };
+					throw new Error(session.text("middleware.messages.editFuncNotFound"));
+				};
 
-                const getCurrentGroupName = async (): Promise<string | undefined> => {
-                    const channel = await session.bot.getChannel(session.channelId);
-                    return channel?.name;
-                };
+				const getCurrentGroupName = async (): Promise<string | undefined> => {
+					const channel = await session.bot.getChannel(session.channelId);
+					return channel?.name;
+				};
 
-			    try {
+				try {
 					const replaceNumberInName = (name: string, digits: string) => {
 						if (!name || !name.length) return digits;
-						const targetLen = digits.replace(/\s+/g, '').length;
+						const targetLen = digits.replace(/\s+/g, "").length;
 						const n = name.length;
 						for (let i = 0; i < n; i++) {
 							for (let j = i + 1; j <= n; j++) {
 								const sub = name.slice(i, j);
-								const compact = sub.replace(/\s+/g, '');
+								const compact = sub.replace(/\s+/g, "");
 								if (compact.length === targetLen && /^\d+$/.test(compact)) {
 									return name.slice(0, i) + digits + name.slice(j);
 								}
 							}
 						}
 						// 未找到可替换的数字段，直接在前面添加（保留一个空格）
-						return digits + ' ' + name;
+						return digits + " " + name;
 					};
 
 					const currentName = await getCurrentGroupName();
-					const contentDigits = String(content).replace(/\s+/g, '');
+					const contentDigits = String(content).replace(/\s+/g, "");
 					let newName: string;
 					if (currentName) {
 						newName = replaceNumberInName(currentName, contentDigits);
@@ -918,42 +984,58 @@ export function apply(ctx: Context, cfg: Config) {
 					}
 
 					await setGroupName(newName);
-					await session.send(session.text("middleware.messages.editGroupNameSuccess", { content: newName }));
+					await session.send(
+						session.text("middleware.messages.editGroupNameSuccess", {
+							content: newName,
+						}),
+					);
 					return; // 拦截
 				} catch (e) {
 					// 如果直接替换失败，继续保留原有的“插入空格重试”策略
 					starfxLogger.warn(`纯数字修改失败，尝试添加空格重试: ${content}`);
 					try {
-						const spacedContent = content.replace(/(\d{3})(?=\d)/g, '$1 ');
+						const spacedContent = content.replace(/(\d{3})(?=\d)/g, "$1 ");
 						// 再次尝试基于当前群名替换或直接设置
 						const currentName = await getCurrentGroupName();
 
 						const finalName = currentName
-							? ((() => {
-								  const targetLen = spacedContent.replace(/\s+/g, '').length;
-								  const n = currentName.length;
-								  for (let i = 0; i < n; i++) {
-									  for (let j = i + 1; j <= n; j++) {
-										  const sub = currentName.slice(i, j);
-										  const compact = sub.replace(/\s+/g, '');
-										  if (compact.length === targetLen && /^\d+$/.test(compact)) {
-											  return currentName.slice(0, i) + spacedContent + currentName.slice(j);
-										  }
-									  }
-								  }
-								  return spacedContent + ' ' + currentName;
-							  })())
+							? (() => {
+									const targetLen = spacedContent.replace(/\s+/g, "").length;
+									const n = currentName.length;
+									for (let i = 0; i < n; i++) {
+										for (let j = i + 1; j <= n; j++) {
+											const sub = currentName.slice(i, j);
+											const compact = sub.replace(/\s+/g, "");
+											if (
+												compact.length === targetLen &&
+												/^\d+$/.test(compact)
+											) {
+												return (
+													currentName.slice(0, i) +
+													spacedContent +
+													currentName.slice(j)
+												);
+											}
+										}
+									}
+									return spacedContent + " " + currentName;
+								})()
 							: spacedContent;
 
 						await setGroupName(finalName);
-						await session.send(session.text("middleware.messages.editGroupNameRetrySuccess", { content, spacedContent: finalName }));
+						await session.send(
+							session.text("middleware.messages.editGroupNameRetrySuccess", {
+								content,
+								spacedContent: finalName,
+							}),
+						);
 						return;
 					} catch (retryError) {
 						starfxLogger.error(`尝试添加空格修改群名仍失败: ${retryError}`);
 					}
-                }
-            }
-        }
+				}
+			}
+		}
 
 		if (
 			cfg.openRepeat &&
@@ -1004,9 +1086,7 @@ export function apply(ctx: Context, cfg: Config) {
 	});
 
 	if (process.env.NODE_ENV === "development") {
-		ctx.command("test [params]").action(async ({ session }) => {
-
-		});
+		ctx.command("test [params]").action(async ({ session }) => {});
 		ctx.middleware(async (session, next) => {
 			await session.send("");
 			return next();

@@ -188,60 +188,75 @@ export async function getImageSrc(
 		quote?: boolean;
 	},
 ): Promise<string> {
-    const { number = true, img = true, at = true, noParam = true, quote = true } = option ?? {};
+	const {
+		number = true,
+		img = true,
+		at = true,
+		noParam = true,
+		quote = true,
+	} = option ?? {};
 
-    // 参数与无参数前置判断
-    if (number && /^\d+$/.test(param)) {
-        const avatar = await getHeadUrlById(session, param);
-        if (avatar) return avatar;
-    }
-    // 无参数使用自己头像
-    if (noParam && !param?.length) {
-        const avatar = await getHeadUrlById(session, session.userId);
-        if (avatar) return avatar;
-    }
+	// 参数与无参数前置判断
+	if (number && /^\d+$/.test(param)) {
+		const avatar = await getHeadUrlById(session, param);
+		if (avatar) return avatar;
+	}
+	// 无参数使用自己头像
+	if (noParam && !param?.length) {
+		const avatar = await getHeadUrlById(session, session.userId);
+		if (avatar) return avatar;
+	}
 
-    // Element 遍历函数
-    const findSrcInElements = async (elements: any[], skipSelfAt = false): Promise<string | null> => {
-        if (!elements?.length) return null;
+	// Element 遍历函数
+	const findSrcInElements = async (
+		elements: any[],
+		skipSelfAt = false,
+	): Promise<string | null> => {
+		if (!elements?.length) return null;
 
-        // 过滤开头的机器人 at
-        let list = elements;
-        if (skipSelfAt) {
-            const startIdx = list.findIndex(el => !(el?.type === "at" && el?.attrs?.id === session.selfId));
-            list = startIdx === -1 ? [] : list.slice(startIdx);
-        }
+		// 过滤开头的机器人 at
+		let list = elements;
+		if (skipSelfAt) {
+			const startIdx = list.findIndex(
+				(el) => !(el?.type === "at" && el?.attrs?.id === session.selfId),
+			);
+			list = startIdx === -1 ? [] : list.slice(startIdx);
+		}
 
-        for (const el of list) {
-            if (img && el?.type === "img" && el?.attrs?.src) {
-                return el.attrs.src;
-            }
-            if (at && el?.type === "at" && el?.attrs?.id && el.attrs.id !== session.selfId) {
-                const avatar = await getHeadUrlById(session, el.attrs.id);
-                if (avatar) return avatar;
-            }
-        }
-        return null;
-    };
+		for (const el of list) {
+			if (img && el?.type === "img" && el?.attrs?.src) {
+				return el.attrs.src;
+			}
+			if (
+				at &&
+				el?.type === "at" &&
+				el?.attrs?.id &&
+				el.attrs.id !== session.selfId
+			) {
+				const avatar = await getHeadUrlById(session, el.attrs.id);
+				if (avatar) return avatar;
+			}
+		}
+		return null;
+	};
 
-    if (quote) {
-        const avatar = await findSrcInElements(session?.quote?.elements);
-        if (avatar) return avatar;
-    }
+	if (quote) {
+		const avatar = await findSrcInElements(session?.quote?.elements);
+		if (avatar) return avatar;
+	}
 
-    return (await findSrcInElements(session?.elements, true)) ?? "";
+	return (await findSrcInElements(session?.elements, true)) ?? "";
 }
 
 async function getHeadUrlById(session: Session, id: string) {
-    switch (session.platform) {
-        case "onebot":
-            return `https://q1.qlogo.cn/g?b=qq&nk=${id}&s=640`;
-        case "qq":
-            return `https://thirdqq.qlogo.cn/qqapp/${session.selfId}/${id}/640`;
-        default:
-            return (await session.bot.getUser(id)).avatar || "";
-
-    }
+	switch (session.platform) {
+		case "onebot":
+			return `https://q1.qlogo.cn/g?b=qq&nk=${id}&s=640`;
+		case "qq":
+			return `https://thirdqq.qlogo.cn/qqapp/${session.selfId}/${id}/640`;
+		default:
+			return (await session.bot.getUser(id)).avatar || "";
+	}
 }
 
 /**
@@ -256,7 +271,7 @@ export async function getImageFromUrl(
 ): Promise<Sharp> {
 	if (!url) throw new Error("URL must be provided");
 
-    const sharp: typeof _sharp = getSharpConstructor(ctx);
+	const sharp: typeof _sharp = getSharpConstructor(ctx);
 
 	try {
 		let input: ArrayBuffer | string;
@@ -603,47 +618,54 @@ export function ready(
  * 安全地从上下文中获取 Sharp 构造函数
  */
 export function getSharpConstructor(ctx: Context) {
-    const raw = ctx.QhzySharp?.Sharp as any;
-    if (!raw) throw new Error("Sharp Service 尚未就绪");
+	const raw = ctx.QhzySharp?.Sharp as any;
+	if (!raw) throw new Error("Sharp Service 尚未就绪");
 
-    const sharpConstructor = typeof raw === 'function' ? raw : raw.default;
+	const sharpConstructor = typeof raw === "function" ? raw : raw.default;
 
-    if (typeof sharpConstructor !== 'function') {
-        throw new Error("无法获取 Sharp 构造函数，请尝试重启 Koishi 或检查 w-node 状态");
-    }
-    return sharpConstructor;
+	if (typeof sharpConstructor !== "function") {
+		throw new Error(
+			"无法获取 Sharp 构造函数，请尝试重启 Koishi 或检查 w-node 状态",
+		);
+	}
+	return sharpConstructor;
 }
 
 /**
  * 检查用户权限
  */
 export async function getAuthority(session: Session) {
-    // observe 数据库字段，确保 authority 属性被加载
-    const user = await session.observeUser(['authority']);
-    const authority = user?.authority || 0;
+	// observe 数据库字段，确保 authority 属性被加载
+	const user = await session.observeUser(["authority"]);
+	const authority = user?.authority || 0;
 
-    // 提取 roles 数组
-    const roles = (session.event.member?.roles || []).map(r =>
-        typeof r === 'string' ? r : r.id
-    );
+	// 提取 roles 数组
+	const roles = (session.event.member?.roles || []).map((r) =>
+		typeof r === "string" ? r : r.id,
+	);
 
-    return { authority, roles };
+	return { authority, roles };
 }
 
 /**
  * 专门检查机器人是否有权执行群管理操作
  */
 export async function canBotManage(session: Session) {
-    try {
-        const selfMember = await session.bot.getGuildMember(session.guildId, session.selfId);
-        const roles = (selfMember.roles || []).map(r => typeof r === 'string' ? r : r.id);
-        return roles.includes('admin') || roles.includes('owner');
-    } catch (e) {
-        return false;
-    }
+	try {
+		const selfMember = await session.bot.getGuildMember(
+			session.guildId,
+			session.selfId,
+		);
+		const roles = (selfMember.roles || []).map((r) =>
+			typeof r === "string" ? r : r.id,
+		);
+		return roles.includes("admin") || roles.includes("owner");
+	} catch (e) {
+		return false;
+	}
 }
 
 export async function canGrant(session: Session) {
-    const { authority, roles } = await getAuthority(session);
-    return authority > 1 || roles.includes('admin') || roles.includes('owner');
+	const { authority, roles } = await getAuthority(session);
+	return authority > 1 || roles.includes("admin") || roles.includes("owner");
 }

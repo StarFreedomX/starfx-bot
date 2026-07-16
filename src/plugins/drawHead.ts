@@ -162,7 +162,7 @@ export async function drawLock(ctx: Context, baseImage: string) {
 		}
 	}
 
-    const sharp: typeof _sharp = getSharpConstructor(ctx);
+	const sharp: typeof _sharp = getSharpConstructor(ctx);
 	const imageMetadata = await image.metadata();
 	const lockUrl = `${baseDir}/data/starfx-bot/assets/lock.png`;
 	const size1 = Math.min(imageMetadata.width, imageMetadata.height);
@@ -192,7 +192,7 @@ export async function drawSold(ctx: Context, baseImage: string) {
 			console.error(error.message);
 		}
 	}
-    const sharp: typeof _sharp = getSharpConstructor(ctx);
+	const sharp: typeof _sharp = getSharpConstructor(ctx);
 	const imageMetadata = await image.metadata();
 	const size1 = Math.min(imageMetadata.width, imageMetadata.height);
 	image.resize({ width: size1, height: size1, fit: "cover" });
