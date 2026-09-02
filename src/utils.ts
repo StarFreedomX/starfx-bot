@@ -3,7 +3,7 @@ import path from "node:path";
 import type _sharp from "@quanhuzeyu/sharp-for-koishi";
 import type { Sharp } from "@quanhuzeyu/sharp-for-koishi";
 import { type Context, h, Random, type Session } from "koishi";
-import { assetsDir, type Config, type recordLink, starfxLogger } from "./index";
+import { assetsDir, type Config, starfxLogger } from "./index";
 import "chartjs-adapter-dayjs-3";
 
 //功能控制
@@ -49,9 +49,15 @@ export async function getRecord(
 	gid: string,
 	tag: string,
 ): Promise<string | null> {
-	const links = structuredClone(cfg.recordLink);
-	links[gid] = { linkGroup: gid, linkWeight: 100 };
-	const selectGid = getRandomLinkGroup(links).replaceAll(":", "_");
+	const candidates: RecordCandidate[] = [
+		{ linkGroup: gid, linkWeight: 100 },
+	];
+	const configuredLink = Object.entries(cfg.recordLink ?? {}).find(
+		([key]) => key.replaceAll(":", "_") === gid,
+	)?.[1];
+	if (configuredLink) candidates.push(configuredLink);
+
+	const selectGid = getRandomLinkGroup(candidates).replaceAll(":", "_");
 	const recordDir = path.join(assetsDir, "record", selectGid);
 	const tagConfigPath = path.join(assetsDir, "tagConfig", `${selectGid}.json`);
 	if (!fs.existsSync(recordDir)) return null;
@@ -86,9 +92,13 @@ export async function getRecord(
 
 	return null;
 }
-function getRandomLinkGroup(record: recordLink): string {
-	// starfxLogger.info(record)
-	const entries = Object.values(record);
+interface RecordCandidate {
+	linkGroup: string;
+	linkWeight: number;
+}
+
+function getRandomLinkGroup(candidates: RecordCandidate[]): string {
+	const entries = candidates;
 	const totalWeight = entries.reduce((sum, item) => sum + item.linkWeight, 0);
 	let r = Math.random() * totalWeight;
 	for (const item of entries) {
